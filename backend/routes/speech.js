@@ -17,51 +17,29 @@ const upload = multer({
   }
 });
 
-// Decode base64 credentials and create a temporary credentials file
-const tempCredentialsPath = path.join(os.tmpdir(), 'google-credentials.json');
-const base64Credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-if (!base64Credentials) {
-  throw new Error('GOOGLE_APPLICATION_CREDENTIALS environment variable is required');
-}
+// Initialize Google Cloud Speech client with credentials
+let client;
 try {
-  const credentialsJson = Buffer.from(base64Credentials, 'base64').toString('utf-8');
-  fs.writeFileSync(tempCredentialsPath, credentialsJson);
-  console.log('Decoded Google credentials and saved to temporary file');
+  // Get base64 encoded credentials from environment variable
+  const base64Credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (!base64Credentials) {
+    throw new Error('GOOGLE_APPLICATION_CREDENTIALS environment variable is required');
+  }
+
+  // Decode base64 credentials
+  const credentials = JSON.parse(Buffer.from(base64Credentials, 'base64').toString());
+  
+  // Create client with decoded credentials
+  client = new speech.SpeechClient({
+    credentials: credentials,
+    projectId: credentials.project_id
+  });
+
+  console.log('Successfully initialized Google Cloud Speech client');
 } catch (error) {
-  console.error('Error decoding Google credentials:', error);
+  console.error('Error initializing Google Cloud Speech client:', error);
   throw error;
 }
-
-// Create a client for Google Cloud Speech-to-Text
-const client = new speech.SpeechClient({
-  keyFilename: tempCredentialsPath
-});
-
-// Clean up credentials file when the process exits
-process.on('exit', () => {
-  try {
-    if (fs.existsSync(tempCredentialsPath)) {
-      fs.unlinkSync(tempCredentialsPath);
-      console.log('Cleaned up temporary credentials file');
-    }
-  } catch (error) {
-    console.error('Error cleaning up credentials file:', error);
-  }
-});
-
-// Also clean up on unhandled errors
-process.on('uncaughtException', () => {
-  if (fs.existsSync(tempCredentialsPath)) {
-    fs.unlinkSync(tempCredentialsPath);
-  }
-});
-
-process.on('SIGINT', () => {
-  if (fs.existsSync(tempCredentialsPath)) {
-    fs.unlinkSync(tempCredentialsPath);
-  }
-  process.exit();
-});
 
 // Set ffmpeg path from ffmpeg-installer
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
