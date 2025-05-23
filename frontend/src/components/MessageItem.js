@@ -11,11 +11,26 @@ const MessageItem = ({
   isPlaying, 
   currentPlayingId, 
   onPlayAudio,
-  isUser
+  isUser,
+  language
 }) => {
   const isDark = theme === 'dark';
   const timestamp = message.timestamp ? new Date(message.timestamp) : null;
   const isValidDate = timestamp && !isNaN(timestamp.getTime());
+
+  // Detect language of text
+  const detectLanguage = (text) => {
+    // Simple language detection based on character set
+    const vietnamesePattern = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+    return vietnamesePattern.test(text) ? 'vi-VN' : 'en-US';
+  };
+
+  const handlePlayAudio = () => {
+    // Use detected language or fallback to current UI language
+    const detectedLang = detectLanguage(message.text);
+    const speechLang = detectedLang || (language === 'vi' ? 'vi-VN' : 'en-US');
+    onPlayAudio(message.id, message.text, speechLang);
+  };
 
   return (
     <View style={[
@@ -27,10 +42,10 @@ const MessageItem = ({
         isUser ? styles.userBubble : styles.aiBubble,
         { backgroundColor: isUser ? '#007AFF' : (isDark ? '#2C2C2E' : '#E5E5EA') }
       ]}>
-        {message.image_url && (
+        {(message.image || message.image_url) && (
           <View style={styles.imageContainer}>
             <Image
-              source={{ uri: message.image_url }}
+              source={{ uri: message.image || message.image_url }}
               style={styles.image}
               resizeMode="contain"
             />
@@ -53,7 +68,7 @@ const MessageItem = ({
               styles.audioButton,
               { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }
             ]}
-            onPress={() => onPlayAudio(message.id, message.text)}
+            onPress={handlePlayAudio}
           >
             <Ionicons
               name={isPlaying && currentPlayingId === message.id ? "stop-circle-outline" : "play-circle-outline"}

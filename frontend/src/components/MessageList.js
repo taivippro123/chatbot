@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { FlatList, StyleSheet } from 'react-native';
+import { FlatList, StyleSheet, ScrollView, View } from 'react-native';
 import MessageItem from './MessageItem';
 // import styles from '../styles/styles';
 
@@ -8,7 +8,8 @@ const MessageList = ({
   theme, 
   isPlaying, 
   currentPlayingId, 
-  onPlayAudio
+  onPlayAudio,
+  language
 }) => {
   const isDark = theme === 'dark';
   const flatListRef = useRef(null);
@@ -27,6 +28,7 @@ const MessageList = ({
       currentPlayingId={currentPlayingId}
       onPlayAudio={onPlayAudio}
       isUser={item.sender === 'user'}
+      language={language}
     />
   );
 

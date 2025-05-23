@@ -25,10 +25,10 @@ import styles from './src/styles/styles';
 import { translations } from './src/translations';
 import SettingsScreen from './src/components/SettingsScreen';
 
-// const API_URL = 'https://chatbot-erif.onrender.com';
+const API_URL = 'https://chatbot-erif.onrender.com/api';
 // const API_URL = 'http://localhost:5000';
 // const API_URL = 'http://192.168.1.2:5000';
-const API_URL = 'http://192.168.1.2:5000/api';
+// const API_URL = 'http://192.168.1.2:5000/api';
 
 export default function App() {
   const insets = useSafeAreaInsets ? useSafeAreaInsets() : { top: 44, bottom: 20 };
@@ -194,7 +194,7 @@ export default function App() {
     }
   };
 
-  const playAudio = async (messageId, text) => {
+  const playAudio = async (messageId, text, speechLang) => {
     try {
       if (isPlaying && currentPlayingId === messageId) {
         await Speech.stop();
@@ -208,7 +208,7 @@ export default function App() {
         setIsPlaying(true);
 
         await Speech.speak(text, {
-          language: settings.language === 'vi' ? 'vi-VN' : 'en-US',
+          language: speechLang,
           onDone: () => {
             setIsPlaying(false);
             setCurrentPlayingId(null);
@@ -278,7 +278,7 @@ export default function App() {
       const userMessage = {
         id: Date.now().toString(),
         text: inputText,
-        image_url: imageUrl,
+        image: imageUrl,
         sender: 'user',
         timestamp: new Date()
       };
@@ -311,7 +311,7 @@ export default function App() {
           ...messagesWithoutTemp,
           {
             ...data.userMessage,
-            image_url: data.userMessage.image_url || imageUrl
+            image: data.userMessage.image || imageUrl
           },
           data.aiMessage
         ];
@@ -444,6 +444,7 @@ export default function App() {
             isPlaying={isPlaying}
             currentPlayingId={currentPlayingId}
             onPlayAudio={playAudio}
+            language={language}
           />
 
           <InputBar
