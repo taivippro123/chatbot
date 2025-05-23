@@ -126,15 +126,22 @@ app.post('/', authenticateToken, upload.single('audio'), async (req, res) => {
         encoding: 'LINEAR16',
         sampleRateHertz: 16000,
         languageCode: req.body.language || 'vi-VN',
-        alternativeLanguageCodes: ['en-US'],
-        model: 'default',
+        alternativeLanguageCodes: ['en-US', 'vi-VN'],
+        model: 'latest_long', // Use latest and most accurate model
         enableAutomaticPunctuation: true,
-        useEnhanced: true, // Use enhanced model
+        useEnhanced: true,
         audioChannelCount: 1,
         enableWordTimeOffsets: false,
         profanityFilter: false,
         speechContexts: [{
-          phrases: ['hello', 'hi', 'xin chào', 'tạm biệt']
+          phrases: [
+            // Common Vietnamese phrases
+            'xin chào', 'cảm ơn', 'tạm biệt', 'làm ơn',
+            // Common English phrases
+            'hello', 'thank you', 'goodbye', 'please',
+            // Add more common phrases in both languages as needed
+          ],
+          boost: 20 // Boost the recognition of these phrases
         }]
       },
     };

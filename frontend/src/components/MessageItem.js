@@ -32,6 +32,44 @@ const MessageItem = ({
     onPlayAudio(message.id, message.text, speechLang);
   };
 
+  // Process text for markdown-style bold
+  const renderFormattedText = (text) => {
+    if (!text) return null;
+    
+    // Split text by bold markers (**text**)
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        // Remove ** markers and render bold text
+        const boldText = part.slice(2, -2);
+        return (
+          <Text
+            key={index}
+            style={[
+              styles.boldText,
+              isUser ? styles.userText : { color: isDark ? '#fff' : '#000' }
+            ]}
+          >
+            {boldText}
+          </Text>
+        );
+      }
+      // Render regular text
+      return (
+        <Text
+          key={index}
+          style={[
+            styles.text,
+            isUser ? styles.userText : { color: isDark ? '#fff' : '#000' }
+          ]}
+        >
+          {part}
+        </Text>
+      );
+    });
+  };
+
   return (
     <View style={[
       styles.container,
@@ -52,15 +90,9 @@ const MessageItem = ({
           </View>
         )}
         {message.text && (
-          <Text style={[
-            styles.text,
-            isUser ? styles.userText : [
-              styles.aiText,
-              { color: isDark ? '#fff' : '#000' }
-            ]
-          ]}>
-            {message.text}
-          </Text>
+          <View style={styles.textContainer}>
+            {renderFormattedText(message.text)}
+          </View>
         )}
         {!isUser && (
           <TouchableOpacity
@@ -127,10 +159,18 @@ const styles = StyleSheet.create({
     height: MAX_IMAGE_WIDTH,
     borderRadius: 15,
   },
+  textContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
   text: {
     fontSize: 16,
-    marginBottom: 4,
     lineHeight: 24,
+  },
+  boldText: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: 'bold',
   },
   userText: {
     color: '#FFFFFF',

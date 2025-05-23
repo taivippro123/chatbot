@@ -445,6 +445,7 @@ export default function App() {
             currentPlayingId={currentPlayingId}
             onPlayAudio={playAudio}
             language={language}
+            onOpenSidebar={() => setIsSidebarOpen(true)}
           />
 
           <InputBar
