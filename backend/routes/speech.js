@@ -17,9 +17,50 @@ const upload = multer({
   }
 });
 
+// Decode base64 credentials and create a temporary credentials file
+const tempCredentialsPath = path.join(os.tmpdir(), 'google-credentials.json');
+const base64Credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+if (!base64Credentials) {
+  throw new Error('GOOGLE_APPLICATION_CREDENTIALS environment variable is required');
+}
+try {
+  const credentialsJson = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+  fs.writeFileSync(tempCredentialsPath, credentialsJson);
+  console.log('Decoded Google credentials and saved to temporary file');
+} catch (error) {
+  console.error('Error decoding Google credentials:', error);
+  throw error;
+}
+
 // Create a client for Google Cloud Speech-to-Text
 const client = new speech.SpeechClient({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
+  keyFilename: tempCredentialsPath
+});
+
+// Clean up credentials file when the process exits
+process.on('exit', () => {
+  try {
+    if (fs.existsSync(tempCredentialsPath)) {
+      fs.unlinkSync(tempCredentialsPath);
+      console.log('Cleaned up temporary credentials file');
+    }
+  } catch (error) {
+    console.error('Error cleaning up credentials file:', error);
+  }
+});
+
+// Also clean up on unhandled errors
+process.on('uncaughtException', () => {
+  if (fs.existsSync(tempCredentialsPath)) {
+    fs.unlinkSync(tempCredentialsPath);
+  }
+});
+
+process.on('SIGINT', () => {
+  if (fs.existsSync(tempCredentialsPath)) {
+    fs.unlinkSync(tempCredentialsPath);
+  }
+  process.exit();
 });
 
 // Set ffmpeg path from ffmpeg-installer
