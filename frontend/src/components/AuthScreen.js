@@ -12,10 +12,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
-// const API_URL = 'https://chatbot-erif.onrender.com';
+const API_URL = 'https://chatbot-erif.onrender.com/api';
 // const API_URL = 'http://localhost:5000';
-// const API_URL = 'http://192.168.1.2:5000';
-const API_URL = 'http://192.168.1.2:5000/api';
+// const API_URL = 'http://192.168.1.2:5000/api';
 
 const AuthScreen = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
