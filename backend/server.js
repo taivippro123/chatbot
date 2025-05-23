@@ -13,11 +13,11 @@ cloudinary.config({
 
 // Tạo kết nối MySQL Pool
 const db = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'chatbot',
-  port: process.env.DB_PORT || 3306,
+  DB_HOST: process.env.DB_HOST || 'localhost',
+  DB_USER: process.env.DB_USER || 'root',
+  DB_PASSWORD: process.env.DB_PASSWORD || '',
+  DB_NAME: process.env.DB_NAME || 'chatbot',
+  DB_PORT: process.env.DB_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 3,
   queueLimit: 0,
