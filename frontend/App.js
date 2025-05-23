@@ -278,7 +278,7 @@ export default function App() {
       const userMessage = {
         id: Date.now().toString(),
         text: inputText,
-        image: imageUrl,
+        image_url: imageUrl,
         sender: 'user',
         timestamp: new Date()
       };
@@ -311,7 +311,7 @@ export default function App() {
           ...messagesWithoutTemp,
           {
             ...data.userMessage,
-            image: data.userMessage.image || imageUrl
+            image_url: data.userMessage.image_url || imageUrl
           },
           data.aiMessage
         ];

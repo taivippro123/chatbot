@@ -27,10 +27,10 @@ const MessageItem = ({
         isUser ? styles.userBubble : styles.aiBubble,
         { backgroundColor: isUser ? '#007AFF' : (isDark ? '#2C2C2E' : '#E5E5EA') }
       ]}>
-        {message.image && (
+        {message.image_url && (
           <View style={styles.imageContainer}>
             <Image
-              source={{ uri: message.image }}
+              source={{ uri: message.image_url }}
               style={styles.image}
               resizeMode="contain"
             />
