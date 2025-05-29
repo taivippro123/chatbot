@@ -6,6 +6,7 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
+  PanResponder 
 } from 'react-native';
 
 import Header from './Header';
@@ -140,6 +141,19 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
     }
   };
 
+
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      // Nếu người dùng vuốt từ trái sang phải một đoạn đáng kể
+      return gestureState.dx > 25 && Math.abs(gestureState.dy) < 20;
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      if (gestureState.dx > 50) {
+        setIsSidebarOpen(true); // Mở sidebar khi vuốt đủ xa
+      }
+    },
+  });
+
   return (
     <KeyboardAvoidingView 
       style={styles.container}
@@ -154,7 +168,7 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
         onSettingsPress={onSettingsPress}
       />
 
-      <View style={styles.content}>
+      <View style={styles.content} {...panResponder.panHandlers}>
         <MessageList
           messages={messages}
           theme={theme}

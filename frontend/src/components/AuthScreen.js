@@ -206,7 +206,7 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#343541',
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     padding: 20,
   },
@@ -225,18 +225,19 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 30,
-    color: '#fff',
+    color: '#000000',
   },
   input: {
     width: '100%',
     height: 50,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#E5E5EA',
     borderRadius: 10,
     paddingHorizontal: 15,
     marginBottom: 15,
     fontSize: 16,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#ffffff',
+    color: '#000000',
   },
   button: {
     width: '100%',
@@ -248,10 +249,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#E5E5EA',
   },
   buttonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
