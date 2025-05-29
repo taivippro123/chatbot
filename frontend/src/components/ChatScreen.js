@@ -1,91 +1,208 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  PanResponder,
-  Animated,
-  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
+
+import Header from './Header';
 import MessageList from './MessageList';
 import InputBar from './InputBar';
-import Header from './Header';
+import Sidebar from './Sidebar';
 
-const SWIPE_THRESHOLD = 50;
-const SIDEBAR_WIDTH = Dimensions.get('window').width * 0.7;
+const API_URL = 'https://chatbot-erif.onrender.com/api';
 
-const ChatScreen = ({ 
-  onOpenSidebar, 
-  messages, 
-  onSendMessage,
-  theme
-}) => {
-  const [isPanning, setIsPanning] = useState(false);
-  const pan = useRef(new Animated.ValueXY()).current;
-  const isDark = theme === 'dark';
-
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gestureState) => {
-      // Only respond to horizontal gestures
-      return Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-    },
-    onPanResponderGrant: () => {
-      setIsPanning(true);
-    },
-    onPanResponderMove: (_, gestureState) => {
-      // Only allow right swipe (positive dx)
-      if (gestureState.dx > 0) {
-        pan.x.setValue(gestureState.dx);
+export const chatAPI = {
+  loadConversations: async (token) => {
+    try {
+      const response = await fetch(`${API_URL}/conversations`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data;
       }
-    },
-    onPanResponderRelease: (_, gestureState) => {
-      setIsPanning(false);
-      if (gestureState.dx > SWIPE_THRESHOLD) {
-        // Open sidebar
-        onOpenSidebar();
+      return [];
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+      return [];
+    }
+  },
+
+  loadConversationMessages: async (token, conversationId) => {
+    try {
+      const response = await fetch(`${API_URL}/conversations/${conversationId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load messages');
       }
-      // Reset position
-      Animated.spring(pan.x, {
-        toValue: 0,
-        useNativeDriver: false,
-      }).start();
-    },
-  });
+
+      const data = await response.json();
+      if (data.success) {
+        return data.messages || [];
+      }
+      throw new Error(data.message || 'Failed to load messages');
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      throw error;
+    }
+  },
+
+  createNewChat: async (token, title) => {
+    try {
+      const response = await fetch(`${API_URL}/conversations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ title })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create conversation');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        return data.conversation;
+      }
+      throw new Error(data.message || 'Failed to create conversation');
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      throw error;
+    }
+  }
+};
+
+const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
+  const [messages, setMessages] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [inputText, setInputText] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlayingId, setCurrentPlayingId] = useState(null);
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const conversationsData = await chatAPI.loadConversations(token);
+        setConversations(conversationsData);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+      }
+    };
+
+    if (token) {
+      loadInitialData();
+    }
+  }, [token]);
+
+  const handleConversationPress = async (id) => {
+    try {
+      setIsLoading(true);
+      const messages = await chatAPI.loadConversationMessages(token, id);
+      setMessages(messages);
+      setCurrentConversationId(id);
+      setIsSidebarOpen(false);
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleNewChat = async () => {
+    try {
+      setIsLoading(true);
+      const newConversation = await chatAPI.createNewChat(token, t.newChat);
+      setConversations(prev => [newConversation, ...prev]);
+      setCurrentConversationId(newConversation.id);
+      setMessages([]);
+      setIsSidebarOpen(false);
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <Animated.View 
-      style={[
-        styles.container,
-        {
-          transform: [{ translateX: pan.x }],
-          backgroundColor: isDark ? '#343541' : '#fff',
-        },
-      ]}
-      {...panResponder.panHandlers}
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 44 : 0}
     >
-      <Header theme={theme} />
-      <MessageList 
-        messages={messages}
-        style={[styles.messageList, isPanning && styles.panning]}
+      <Header
         theme={theme}
+        title={currentConversationId ? t.chat : t.newChat}
+        onMenuPress={() => setIsSidebarOpen(true)}
+        onLogout={onLogout}
+        onSettingsPress={onSettingsPress}
       />
-      <InputBar 
-        onSendMessage={onSendMessage} 
+
+      <View style={styles.content}>
+        <MessageList
+          messages={messages}
+          theme={theme}
+          isPlaying={isPlaying}
+          currentPlayingId={currentPlayingId}
+          setIsPlaying={setIsPlaying}
+          setCurrentPlayingId={setCurrentPlayingId}
+        />
+      </View>
+
+      <InputBar
         theme={theme}
+        token={token}
+        currentConversationId={currentConversationId}
+        inputText={inputText}
+        setInputText={setInputText}
+        selectedImage={selectedImage}
+        setSelectedImage={setSelectedImage}
+        isRecording={isRecording}
+        setIsRecording={setIsRecording}
+        isLoading={isLoading}
+        setMessages={setMessages}
+        t={t}
       />
-    </Animated.View>
+
+      {isSidebarOpen && (
+        <Sidebar
+          theme={theme}
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onConversationPress={handleConversationPress}
+          onClose={() => setIsSidebarOpen(false)}
+          onNewChat={handleNewChat}
+          t={t}
+        />
+      )}
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
-  messageList: {
+  content: {
     flex: 1,
-  },
-  panning: {
-    opacity: 0.7,
+    backgroundColor: 'transparent',
   },
 });
 

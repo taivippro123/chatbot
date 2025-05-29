@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,43 @@ import {
   Modal,
   Dimensions,
   TouchableWithoutFeedback,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { translations } from '../translations';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { height } = Dimensions.get('window');
+const { height, width } = Dimensions.get('window');
 const MODAL_HEIGHT = height * 0.6;
+const SWIPE_THRESHOLD = 50;
+
+// Settings API functions
+export const settingsAPI = {
+  loadSettings: async (onThemeChange, onLanguageChange) => {
+    try {
+      const savedSettings = await AsyncStorage.getItem('settings');
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        onThemeChange(parsed.theme || 'light');
+        onLanguageChange(parsed.language || 'vi');
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  },
+
+  saveSettings: async (theme, language) => {
+    try {
+      const settings = { theme, language };
+      await AsyncStorage.setItem('settings', JSON.stringify(settings));
+      return true;
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      return false;
+    }
+  }
+};
 
 const SettingsScreen = ({
   visible,
@@ -26,135 +57,232 @@ const SettingsScreen = ({
 }) => {
   const t = translations[language];
   const isDark = theme === 'dark';
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const panY = useRef(new Animated.Value(0)).current;
+
+  const resetAnimationConfig = {
+    toValue: 0,
+    duration: 200,
+    useNativeDriver: true,
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const { dx, dy } = gestureState;
+        return Math.abs(dx) > 20 || Math.abs(dy) > 20;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const { dx, dy } = gestureState;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          // Horizontal swipe - don't move
+          return;
+        }
+        if (dy > 0) { // Only allow downward swipe
+          panY.setValue(dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        
+        if (Math.abs(dx) > Math.abs(dy) && dx > SWIPE_THRESHOLD) {
+          // Handle horizontal swipe
+          onClose();
+          return;
+        }
+        
+        if (dy > SWIPE_THRESHOLD) {
+          // User swiped down
+          Animated.timing(fadeAnim, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(onClose);
+        } else {
+          // Reset position
+          Animated.spring(panY, resetAnimationConfig).start();
+        }
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    if (visible) {
+      panY.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  const handleThemeChange = async (newTheme) => {
+    try {
+      if (await settingsAPI.saveSettings(newTheme, language)) {
+        onThemeChange(newTheme);
+      }
+    } catch (error) {
+      console.error('Error saving theme:', error);
+    }
+  };
+
+  const handleLanguageChange = async (newLanguage) => {
+    try {
+      if (await settingsAPI.saveSettings(theme, newLanguage)) {
+        onLanguageChange(newLanguage);
+      }
+    } catch (error) {
+      console.error('Error saving language:', error);
+    }
+  };
+
+  if (!visible) return null;
 
   return (
     <Modal
       visible={visible}
       transparent={true}
-      animationType="slide"
+      animationType="none"
       onRequestClose={onClose}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback>
-            <View style={[
-              styles.modalContent,
-              { 
-                backgroundColor: isDark ? '#202123' : '#fff',
-                shadowColor: isDark ? '#000' : '#000',
-              }
-            ]}>
-              <View style={[
-                styles.header,
-                { borderBottomColor: isDark ? '#333' : '#eee' }
-              ]}>
-                <Text style={[
-                  styles.title,
-                  { color: isDark ? '#fff' : '#000' }
+      <Animated.View 
+        style={[
+          styles.modalOverlay,
+          { opacity: fadeAnim }
+        ]}
+      >
+        <TouchableWithoutFeedback onPress={onClose}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <Animated.View 
+                {...panResponder.panHandlers}
+                style={[
+                  styles.modalContent,
+                  { 
+                    backgroundColor: isDark ? '#202123' : '#fff',
+                    shadowColor: isDark ? '#000' : '#000',
+                    transform: [
+                      {
+                        translateY: panY
+                      }
+                    ]
+                  }
+                ]}
+              >
+                <View style={[
+                  styles.header,
+                  { borderBottomColor: isDark ? '#333' : '#eee' }
                 ]}>
-                  {t.settings}
-                </Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                  <Ionicons
-                    name="close"
-                    size={24}
-                    color={isDark ? '#fff' : '#000'}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={styles.content}>
-                {/* Appearance Section */}
-                <View style={styles.section}>
                   <Text style={[
-                    styles.sectionTitle,
+                    styles.title,
                     { color: isDark ? '#fff' : '#000' }
                   ]}>
-                    {t.appearance}
+                    {t.settings}
                   </Text>
-                  <View style={[
-                    styles.option,
-                    { backgroundColor: isDark ? '#2D2D2D' : '#f5f5f5' }
-                  ]}>
-                    <Text style={[
-                      styles.optionText,
-                      { color: isDark ? '#fff' : '#000' }
-                    ]}>
-                      {t.darkMode}
-                    </Text>
-                    <Switch
-                      value={isDark}
-                      onValueChange={(value) => onThemeChange(value ? 'dark' : 'light')}
-                      trackColor={{ false: '#767577', true: '#81b0ff' }}
-                      thumbColor={isDark ? '#fff' : '#f4f3f4'}
+                  <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                    <Ionicons
+                      name="close"
+                      size={24}
+                      color={isDark ? '#fff' : '#000'}
                     />
-                  </View>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Language Section */}
-                <View style={styles.section}>
-                  <Text style={[
-                    styles.sectionTitle,
-                    { color: isDark ? '#fff' : '#000' }
-                  ]}>
-                    {t.language}
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.languageOption,
-                      language === 'en' && styles.selectedLanguage,
-                      { 
-                        backgroundColor: isDark ? '#2D2D2D' : '#f5f5f5',
-                        borderColor: isDark ? '#333' : '#ddd' 
-                      }
-                    ]}
-                    onPress={() => onLanguageChange('en')}
-                  >
+                <ScrollView style={styles.content}>
+                  {/* Appearance Section */}
+                  <View style={styles.section}>
                     <Text style={[
-                      styles.languageText,
+                      styles.sectionTitle,
                       { color: isDark ? '#fff' : '#000' }
                     ]}>
-                      {t.english}
+                      {t.appearance}
                     </Text>
-                    {language === 'en' && (
-                      <Ionicons
-                        name="checkmark"
-                        size={20}
-                        color={isDark ? '#fff' : '#000'}
+                    <View style={[
+                      styles.option,
+                      { backgroundColor: isDark ? '#2D2D2D' : '#f5f5f5' }
+                    ]}>
+                      <Text style={[
+                        styles.optionText,
+                        { color: isDark ? '#fff' : '#000' }
+                      ]}>
+                        {t.darkMode}
+                      </Text>
+                      <Switch
+                        value={isDark}
+                        onValueChange={(value) => handleThemeChange(value ? 'dark' : 'light')}
+                        trackColor={{ false: '#767577', true: '#81b0ff' }}
+                        thumbColor={isDark ? '#fff' : '#f4f3f4'}
                       />
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.languageOption,
-                      language === 'vi' && styles.selectedLanguage,
-                      { 
-                        backgroundColor: isDark ? '#2D2D2D' : '#f5f5f5',
-                        borderColor: isDark ? '#333' : '#ddd' 
-                      }
-                    ]}
-                    onPress={() => onLanguageChange('vi')}
-                  >
+                    </View>
+                  </View>
+
+                  {/* Language Section */}
+                  <View style={styles.section}>
                     <Text style={[
-                      styles.languageText,
+                      styles.sectionTitle,
                       { color: isDark ? '#fff' : '#000' }
                     ]}>
-                      {t.vietnamese}
+                      {t.language}
                     </Text>
-                    {language === 'vi' && (
-                      <Ionicons
-                        name="checkmark"
-                        size={20}
-                        color={isDark ? '#fff' : '#000'}
-                      />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
+                    <TouchableOpacity
+                      style={[
+                        styles.languageOption,
+                        language === 'en' && styles.selectedLanguage,
+                        { 
+                          backgroundColor: isDark ? '#2D2D2D' : '#f5f5f5',
+                          borderColor: isDark ? '#333' : '#ddd' 
+                        }
+                      ]}
+                      onPress={() => handleLanguageChange('en')}
+                    >
+                      <Text style={[
+                        styles.languageText,
+                        { color: isDark ? '#fff' : '#000' }
+                      ]}>
+                        {t.english}
+                      </Text>
+                      {language === 'en' && (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color={isDark ? '#fff' : '#000'}
+                        />
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.languageOption,
+                        language === 'vi' && styles.selectedLanguage,
+                        { 
+                          backgroundColor: isDark ? '#2D2D2D' : '#f5f5f5',
+                          borderColor: isDark ? '#333' : '#ddd' 
+                        }
+                      ]}
+                      onPress={() => handleLanguageChange('vi')}
+                    >
+                      <Text style={[
+                        styles.languageText,
+                        { color: isDark ? '#fff' : '#000' }
+                      ]}>
+                        {t.vietnamese}
+                      </Text>
+                      {language === 'vi' && (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color={isDark ? '#fff' : '#000'}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </Animated.View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Animated.View>
     </Modal>
   );
 };

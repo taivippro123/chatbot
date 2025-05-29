@@ -94,7 +94,7 @@ const MessageItem = ({
             {renderFormattedText(message.text)}
           </View>
         )}
-        {!isUser && (
+        {!isUser && message.text && (
           <TouchableOpacity
             style={[
               styles.audioButton,

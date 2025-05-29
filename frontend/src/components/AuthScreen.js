@@ -8,24 +8,58 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  TouchableWithoutFeedback,
+  Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { translations } from '../translations';
 
 const API_URL = 'https://chatbot-erif.onrender.com/api';
 // const API_URL = 'http://localhost:5000';
 // const API_URL = 'http://192.168.1.2:5000/api';
 
-const AuthScreen = ({ onAuthSuccess }) => {
+// Auth API functions
+export const authAPI = {
+  loadTokenAndUser: async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userStr = await AsyncStorage.getItem('user');
+      if (token && userStr) {
+        const user = JSON.parse(userStr);
+        return { token, user };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error loading token and user:', error);
+      return null;
+    }
+  },
+
+  handleLogout: async () => {
+    try {
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+      return true;
+    } catch (error) {
+      console.error('Error during logout:', error);
+      return false;
+    }
+  }
+};
+
+const AuthScreen = ({ onAuthSuccess, language }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const t = translations[language];
 
   const handleAuth = async () => {
     if (!email || !password || (!isLogin && !name)) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t.error, t.fillAllFields);
       return;
     }
 
@@ -68,89 +102,118 @@ const AuthScreen = ({ onAuthSuccess }) => {
       onAuthSuccess(data.token, data.user);
     } catch (error) {
       console.error('Auth error:', error);
-      Alert.alert('Error', error.message);
+      Alert.alert(t.error, t.networkError);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const loadTokenAndUser = async () => {
+    try {
+      const savedToken = await AsyncStorage.getItem('token');
+      const savedUser = await AsyncStorage.getItem('user');
+      if (savedToken && savedUser) {
+        onAuthSuccess(savedToken, JSON.parse(savedUser));
+      }
+    } catch (error) {
+      console.error('Error loading token and user:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+      onAuthSuccess(null, null);
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="chatbubbles-outline" size={80} color="#007AFF" />
-        </View>
-        
-        <Text style={styles.title}>{isLogin ? 'Welcome Back!' : 'Create Account'}</Text>
-        
-        {!isLogin && (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <View style={styles.content}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="chatbubbles-outline" size={80} color="#007AFF" />
+          </View>
+          
+          <Text style={styles.title}>{isLogin ? 'Welcome Back!' : 'Create Account'}</Text>
+          
+          {!isLogin && (
+            <TextInput
+              style={styles.input}
+              placeholder="Name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+            />
+          )}
+          
           <TextInput
             style={styles.input}
-            placeholder="Name"
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
           />
-        )}
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+          
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
 
-        <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
-          onPress={handleAuth}
-          disabled={isLoading}
-        >
-          <Text style={styles.buttonText}>
-            {isLoading ? 'Please wait...' : (isLogin ? 'Login' : 'Register')}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, isLoading && styles.buttonDisabled]}
+            onPress={handleAuth}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {isLogin ? 'Login' : 'Register'}
+              </Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.switchButton}
-          onPress={() => {
-            setIsLogin(!isLogin);
-            setEmail('');
-            setPassword('');
-            setName('');
-          }}
-        >
-          <Text style={styles.switchText}>
-            {isLogin ? "Don't have an account? Register" : 'Already have an account? Login'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          <TouchableOpacity
+            style={styles.switchButton}
+            onPress={() => {
+              setIsLogin(!isLogin);
+              setEmail('');
+              setPassword('');
+              setName('');
+            }}
+          >
+            <Text style={styles.switchText}>
+              {isLogin ? "Don't have an account? Register" : 'Already have an account? Login'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#343541',
+    justifyContent: 'center',
+    padding: 20,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   iconContainer: {
     marginBottom: 30,
@@ -162,7 +225,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 30,
-    color: '#1a1a1a',
+    color: '#fff',
   },
   input: {
     width: '100%',
