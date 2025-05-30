@@ -64,8 +64,11 @@ async function processChat(req, res, conversationId, message) {
     let userImageUrls = [];
     let imageDataArray = [];
 
+    // Get text from request body
+    const text = req.body.text || '';
+
     if (req.files && req.files.length > 0) {
-      // Xử lý và tải nhiều ảnh lên Cloudinary
+      // Process and upload multiple images to Cloudinary
       for (const file of req.files) {
         const processedImage = await sharp(file.buffer)
           .resize(512, 512, { fit: 'inside' })
@@ -80,10 +83,10 @@ async function processChat(req, res, conversationId, message) {
       }
     }
 
-    // Lưu tin nhắn người dùng với nhiều ảnh
+    // Save user message with multiple images
     req.db.query(
       'INSERT INTO messages (conversation_id, sender, text, image_urls) VALUES (?, ?, ?, ?)',
-      [conversationId, 'user', message, userImageUrls.length > 0 ? JSON.stringify(userImageUrls) : null],
+      [conversationId, 'user', text, userImageUrls.length > 0 ? JSON.stringify(userImageUrls) : null],
       async (err, result) => {
         if (err) {
           console.error('Create user message error:', err);
@@ -92,35 +95,43 @@ async function processChat(req, res, conversationId, message) {
 
         const userMessageId = result.insertId;
 
-        // Chuẩn bị nội dung cho Gemini API
-        const parts = [];
-        
-        // Always add text part if message exists
-        if (message && message.trim()) {
-          parts.push({ text: message.trim() });
-        }
-
-        // Add image parts if they exist
-        imageDataArray.forEach(imageData => {
-          parts.push({
-            inline_data: {
-              mime_type: 'image/jpeg',
-              data: imageData
-            }
-          });
-        });
-
-        // Ensure there's at least an empty text part if no content
-        if (parts.length === 0) {
-          parts.push({ text: '' });
-        }
-
-        const contents = [{
-          parts
-        }];
-
         try {
-          // Gọi API Gemini
+          // Prepare request for Gemini API
+          const parts = [];
+          
+          // Always add text part first if it exists
+          if (text && text.trim()) {
+            parts.push({ text: text.trim() });
+          }
+
+          // Add image parts if they exist
+          imageDataArray.forEach(imageData => {
+            parts.push({
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: imageData
+              }
+            });
+          });
+
+          // Ensure there's at least one part
+          if (parts.length === 0) {
+            parts.push({ text: '' });
+          }
+
+          const contents = [{
+            parts
+          }];
+
+          console.log('Sending to Gemini API:', JSON.stringify({
+            ...contents[0],
+            parts: contents[0].parts.map(part => ({
+              ...part,
+              inline_data: part.inline_data ? { mime_type: part.inline_data.mime_type } : undefined
+            }))
+          }, null, 2));
+
+          // Call Gemini API
           const response = await axios.post(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
             { contents },
@@ -131,66 +142,51 @@ async function processChat(req, res, conversationId, message) {
             }
           );
 
+          console.log('Gemini API Response:', JSON.stringify(response.data, null, 2));
+
           const aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from AI.';
 
-          // Lưu phản hồi của AI
+          // Save AI response
           req.db.query(
             'INSERT INTO messages (conversation_id, sender, text) VALUES (?, ?, ?)',
             [conversationId, 'ai', aiResponse],
             async (err, result) => {
               if (err) {
                 console.error('Create AI message error:', err);
-                return res.status(500).json({ message: 'Lỗi server' });
+                return res.status(500).json({ message: 'Server error' });
               }
 
               const aiMessageId = result.insertId;
 
-              // Lấy cả hai tin nhắn để trả về
+              // Get both messages to return
               req.db.query(
                 'SELECT * FROM messages WHERE id IN (?, ?)',
                 [userMessageId, aiMessageId],
                 (err, messages) => {
                   if (err) {
                     console.error('Get messages error:', err);
-                    return res.status(500).json({ message: 'Lỗi server' });
+                    return res.status(500).json({ message: 'Server error' });
                   }
 
                   const userMessage = messages.find(m => m.id === userMessageId);
                   const aiMessage = messages.find(m => m.id === aiMessageId);
 
-                  // Parse image_urls cho user message
+                  // Parse image_urls for user message
                   if (userMessage && userMessage.image_urls) {
                     try {
-                      // Check if image_urls is already an array
                       if (Array.isArray(userMessage.image_urls)) {
                         userMessage.images = userMessage.image_urls;
-                      }
-                      // Check if it's a JSON string
-                      else if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('[')) {
+                      } else if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('[')) {
                         userMessage.images = JSON.parse(userMessage.image_urls);
-                      }
-                      // If it's a single URL string
-                      else if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('http')) {
+                      } else if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('http')) {
                         userMessage.images = [userMessage.image_urls];
-                      }
-                      // Default to empty array if none of the above
-                      else {
+                      } else {
                         userMessage.images = [];
                       }
                     } catch (e) {
                       console.error('Error parsing image_urls:', e);
-                      // If parsing fails but it's a URL string
-                      if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('http')) {
-                        userMessage.images = [userMessage.image_urls];
-                      } else {
-                        userMessage.images = userImageUrls; // Use the original array
-                      }
+                      userMessage.images = userImageUrls;
                     }
-                  }
-
-                  // Ensure text field is preserved
-                  if (!userMessage.text && message) {
-                    userMessage.text = message;
                   }
 
                   res.json({
@@ -203,27 +199,25 @@ async function processChat(req, res, conversationId, message) {
             }
           );
         } catch (error) {
-          console.error('Gemini API error:', error);
-          // Check if it's a token limit error
-          if (error.response?.data?.error?.message?.includes('quota')) {
-            res.status(429).json({ 
+          console.error('Gemini API error:', error.response?.data || error);
+          if (error.response?.status === 429) {
+            return res.status(429).json({
               message: 'API quota exceeded. Please try again later.',
               error: 'QUOTA_EXCEEDED'
             });
-          } else {
-            res.status(500).json({ 
-              message: 'Lỗi khi gọi API Gemini',
-              error: error.message 
-            });
           }
+          res.status(500).json({
+            message: 'Error calling Gemini API',
+            error: error.message
+          });
         }
       }
     );
   } catch (error) {
     console.error('Process chat error:', error);
-    res.status(500).json({ 
-      message: 'Lỗi xử lý tin nhắn',
-      error: error.message 
+    res.status(500).json({
+      message: 'Error processing message',
+      error: error.message
     });
   }
 }
