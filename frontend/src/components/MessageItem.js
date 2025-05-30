@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { detectSpeechLanguage } from '../utils/languageUtils';
 
 const { width } = Dimensions.get('window');
-const MAX_IMAGE_WIDTH = width * 0.6;
+const MAX_IMAGE_WIDTH = width * 0.65;
+const MAX_IMAGE_HEIGHT = width * 0.5;
+const MULTI_IMAGE_WIDTH = width * 0.45;
 
 const MessageItem = ({ 
   message, 
@@ -40,6 +42,12 @@ const MessageItem = ({
   const renderFormattedText = (text) => {
     if (!text) return null;
     
+    // If text is an object, try to extract the text content
+    if (typeof text === 'object') {
+      console.warn('Text is an object:', text);
+      return null;
+    }
+    
     // Split text by bold markers (**text**)
     const parts = text.split(/(\*\*.*?\*\*)/g);
     
@@ -74,6 +82,35 @@ const MessageItem = ({
     });
   };
 
+  // Get images array from message
+  const getImages = () => {
+    try {
+      // First check message.images from API response
+      if (message.images) {
+        return Array.isArray(message.images) ? message.images : [];
+      }
+      
+      // Then check image_urls
+      if (message.image_urls) {
+        // If image_urls is already an array, use it directly
+        if (Array.isArray(message.image_urls)) {
+          return message.image_urls;
+        }
+        // If image_urls is a JSON string, parse it
+        if (typeof message.image_urls === 'string') {
+          const parsed = JSON.parse(message.image_urls);
+          return Array.isArray(parsed) ? parsed : [];
+        }
+      }
+      return [];
+    } catch (error) {
+      console.error('Error parsing image_urls:', error);
+      return [];
+    }
+  };
+
+  const images = getImages();
+
   return (
     <View style={[
       styles.container,
@@ -84,17 +121,42 @@ const MessageItem = ({
         isUser ? styles.userBubble : styles.aiBubble,
         { backgroundColor: isUser ? '#007AFF' : (isDark ? '#2C2C2E' : '#E5E5EA') }
       ]}>
-        {(message.image || message.image_url) && (
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: message.image || message.image_url }}
-              style={styles.image}
-              resizeMode="contain"
-            />
+        {images.length > 0 && (
+          <View style={styles.imagesContainer}>
+            {images.length === 1 ? (
+              // Single image view
+              <View style={styles.singleImageContainer}>
+                <Image
+                  source={{ uri: images[0] }}
+                  style={styles.singleImage}
+                  resizeMode="cover"
+                />
+              </View>
+            ) : (
+              // Multiple images view with grid layout
+              <View style={styles.multiImageContainer}>
+                {images.map((imageUrl, index) => (
+                  <View key={index} style={[
+                    styles.imageContainer,
+                    index % 2 === 1 && styles.imageContainerRight,
+                    index >= 2 && styles.imageContainerBottom
+                  ]}>
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={styles.image}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
         {message.text && (
-          <View style={styles.textContainer}>
+          <View style={[
+            styles.textContainer,
+            images.length > 0 && styles.textWithImages
+          ]}>
             {renderFormattedText(message.text)}
           </View>
         )}
@@ -131,7 +193,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 8,
     marginVertical: 2,
-    maxWidth: '80%',
+    maxWidth: '90%',
   },
   userContainer: {
     alignSelf: 'flex-end',
@@ -143,6 +205,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 12,
     minWidth: 100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
   userBubble: {
     backgroundColor: '#007AFF',
@@ -151,19 +218,52 @@ const styles = StyleSheet.create({
   aiBubble: {
     borderBottomLeftRadius: 5,
   },
-  imageContainer: {
+  imagesContainer: {
     marginBottom: 8,
     borderRadius: 15,
     overflow: 'hidden',
   },
-  image: {
-    width: MAX_IMAGE_WIDTH,
-    height: MAX_IMAGE_WIDTH,
+  singleImageContainer: {
     borderRadius: 15,
+    overflow: 'hidden',
+    backgroundColor: '#f0f0f0',
+  },
+  singleImage: {
+    width: MAX_IMAGE_WIDTH,
+    height: MAX_IMAGE_HEIGHT,
+    borderRadius: 15,
+  },
+  multiImageContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    width: MAX_IMAGE_WIDTH,
+  },
+  imageContainer: {
+    width: MULTI_IMAGE_WIDTH,
+    height: MULTI_IMAGE_WIDTH,
+    marginBottom: 2,
+    marginRight: 2,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#f0f0f0',
+  },
+  imageContainerRight: {
+    marginRight: 0,
+  },
+  imageContainerBottom: {
+    marginBottom: 0,
+  },
+  image: {
+    width: '100%',
+    height: '100%',
   },
   textContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  textWithImages: {
+    marginTop: 8,
   },
   text: {
     fontSize: 16,

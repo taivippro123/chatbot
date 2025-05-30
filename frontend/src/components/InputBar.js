@@ -8,20 +8,25 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
-  ScrollView
+  ScrollView,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { API_URL } from '@env';
 import { getAPILanguage } from '../utils/languageUtils';
+
+const { width } = Dimensions.get('window');
+const PREVIEW_IMAGE_SIZE = width * 0.25;
+const PREVIEW_CONTAINER_HEIGHT = PREVIEW_IMAGE_SIZE + 20;
+
 console.log('API_URL from env:', API_URL);
+
 const InputBar = ({
   theme,
   inputText,
   setInputText,
-  selectedImage,
-  setSelectedImage,
   isRecording,
   setIsRecording,
   isLoading,
@@ -58,19 +63,19 @@ const InputBar = ({
 
   const handleImageAction = () => {
     Alert.alert(
-      'Select Image',
-      'Choose an option',
+      t.selectImage || 'Select Image',
+      t.chooseOption || 'Choose an option',
       [
         {
-          text: 'Take Photo',
+          text: t.takePhoto || 'Take Photo',
           onPress: () => launchCamera(),
         },
         {
-          text: 'Choose from Library',
+          text: t.chooseFromLibrary || 'Choose from Library',
           onPress: () => pickImage(),
         },
         {
-          text: 'Cancel',
+          text: t.cancel || 'Cancel',
           style: 'cancel',
         },
       ],
@@ -88,13 +93,13 @@ const InputBar = ({
         quality: 0.8,
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const newImage = result.assets[0];
         setSelectedImages(prev => [...prev, newImage.uri]);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Could not take photo');
+      Alert.alert(t.error || 'Error', t.couldNotTakePhoto || 'Could not take photo');
     }
   };
 
@@ -107,15 +112,23 @@ const InputBar = ({
         allowsMultipleSelection: true,
         aspect: [4, 3],
         quality: 0.8,
+        selectionLimit: 10,
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const newImages = result.assets.map(asset => asset.uri);
-        setSelectedImages(prev => [...prev, ...newImages]);
+        setSelectedImages(prev => {
+          const combined = [...prev, ...newImages];
+          if (combined.length > 10) {
+            Alert.alert(t.error || 'Error', t.maxImagesLimit || 'Maximum 10 images allowed');
+            return combined.slice(0, 10);
+          }
+          return combined;
+        });
       }
     } catch (error) {
       console.error('Error picking images:', error);
-      Alert.alert('Error', 'Could not pick images');
+      Alert.alert(t.error || 'Error', t.couldNotPickImages || 'Could not pick images');
     }
   };
 
@@ -200,7 +213,7 @@ const InputBar = ({
   const sendMessage = async () => {
     if (!localInputText.trim() && selectedImages.length === 0) return;
     if (!token) {
-      Alert.alert('Error', 'Please login first');
+      Alert.alert(t.error || 'Error', t.pleaseLoginFirst || 'Please login first');
       return;
     }
 
@@ -215,7 +228,7 @@ const InputBar = ({
       setSelectedImages([]);
 
       const formData = new FormData();
-      formData.append('message', currentText);
+      formData.append('text', currentText);
       formData.append('language', getAPILanguage(currentText, language));
 
       // Append all images
@@ -235,6 +248,7 @@ const InputBar = ({
         formData.append('conversation_id', currentConversationId);
       }
 
+      // Add temporary message
       const userMessage = {
         id: Date.now().toString(),
         text: currentText,
@@ -255,7 +269,7 @@ const InputBar = ({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        throw new Error(t.failedToSendMessage || 'Failed to send message');
       }
 
       const data = await response.json();
@@ -278,7 +292,7 @@ const InputBar = ({
       });
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', error.message);
+      Alert.alert(t.error || 'Error', error.message);
       setMessages(prev => prev.slice(0, -1));
       // Restore input text and images if sending failed
       setLocalInputText(currentText);
@@ -299,12 +313,14 @@ const InputBar = ({
           horizontal 
           style={styles.imagePreviewScroll}
           showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.imagePreviewContent}
         >
           {selectedImages.map((uri, index) => (
             <View key={index} style={styles.imagePreview}>
               <Image
                 source={{ uri }}
                 style={styles.previewImage}
+                resizeMode="cover"
               />
               <TouchableOpacity
                 style={styles.removeImage}
@@ -319,15 +335,21 @@ const InputBar = ({
 
       <View style={styles.inputContainer}>
         <TouchableOpacity
-          style={styles.button}
+          style={[
+            styles.button,
+            selectedImages.length >= 10 && styles.disabledButton
+          ]}
           onPress={handleImageAction}
-          disabled={isLoading || isSending}
+          disabled={isLoading || isSending || selectedImages.length >= 10}
         >
           <Ionicons
             name="image-outline"
             size={24}
             color={isDark ? '#fff' : '#666'}
-            style={[isLoading || isSending ? { opacity: 0.5 } : null]}
+            style={[
+              (isLoading || isSending || selectedImages.length >= 10) && 
+              { opacity: 0.5 }
+            ]}
           />
         </TouchableOpacity>
 
@@ -336,7 +358,7 @@ const InputBar = ({
             styles.input,
             { color: isDark ? '#fff' : '#000' }
           ]}
-          placeholder={t.askAnything}
+          placeholder={t.askAnything || 'Ask anything...'}
           placeholderTextColor={isDark ? '#8e8ea0' : '#999'}
           value={localInputText}
           onChangeText={(text) => {
@@ -400,33 +422,56 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     maxHeight: 100,
     fontSize: 16,
+    paddingVertical: 8,
   },
   button: {
     padding: 8,
+    borderRadius: 20,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   recordingButton: {
     backgroundColor: 'rgba(255, 68, 68, 0.1)',
-    borderRadius: 20,
   },
   imagePreviewScroll: {
-    flexGrow: 0,
+    height: PREVIEW_CONTAINER_HEIGHT,
     marginBottom: 10,
   },
+  imagePreviewContent: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
   imagePreview: {
-    marginRight: 10,
+    marginHorizontal: 5,
     position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   previewImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
+    width: PREVIEW_IMAGE_SIZE,
+    height: PREVIEW_IMAGE_SIZE,
+    borderRadius: 12,
   },
   removeImage: {
     position: 'absolute',
-    top: -10,
-    right: -10,
+    top: -8,
+    right: -8,
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 15,
+    padding: 2,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    zIndex: 1,
   },
   sendButton: {
     padding: 8,
