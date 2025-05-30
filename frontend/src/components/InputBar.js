@@ -19,6 +19,7 @@ import { getAPILanguage } from '../utils/languageUtils';
 
 const { width } = Dimensions.get('window');
 const PREVIEW_IMAGE_SIZE = width * 0.2;
+const MAX_IMAGES = 5;
 
 console.log('API_URL from env:', API_URL);
 
@@ -111,16 +112,16 @@ const InputBar = ({
         allowsMultipleSelection: true,
         aspect: [4, 3],
         quality: 0.8,
-        selectionLimit: 10,
+        selectionLimit: MAX_IMAGES,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const newImages = result.assets.map(asset => asset.uri);
         setSelectedImages(prev => {
           const combined = [...prev, ...newImages];
-          if (combined.length > 10) {
-            Alert.alert(t.error || 'Error', t.maxImagesLimit || 'Maximum 10 images allowed');
-            return combined.slice(0, 10);
+          if (combined.length > MAX_IMAGES) {
+            Alert.alert(t.error || 'Error', t.maxImagesLimit || 'Maximum 5 images allowed');
+            return combined.slice(0, MAX_IMAGES);
           }
           return combined;
         });
@@ -344,7 +345,13 @@ const InputBar = ({
                 style={styles.removeImage}
                 onPress={() => removeImage(index)}
               >
-                <Ionicons name="close-circle" size={24} color="#ff4444" />
+                <View style={styles.removeIcon}>
+                  <Ionicons 
+                    name="close-circle" 
+                    size={24} 
+                    color="#ff4444"
+                  />
+                </View>
               </TouchableOpacity>
             </View>
           ))}
@@ -355,17 +362,17 @@ const InputBar = ({
         <TouchableOpacity
           style={[
             styles.button,
-            selectedImages.length >= 10 && styles.disabledButton
+            selectedImages.length >= MAX_IMAGES && styles.disabledButton
           ]}
           onPress={handleImageAction}
-          disabled={isLoading || isSending || selectedImages.length >= 10}
+          disabled={isLoading || isSending || selectedImages.length >= MAX_IMAGES}
         >
           <Ionicons
             name="image-outline"
             size={24}
             color={isDark ? '#fff' : '#666'}
             style={[
-              (isLoading || isSending || selectedImages.length >= 10) && 
+              (isLoading || isSending || selectedImages.length >= MAX_IMAGES) && 
               { opacity: 0.5 }
             ]}
           />
@@ -453,34 +460,53 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 68, 68, 0.1)',
   },
   imagePreviewScroll: {
-    maxHeight: PREVIEW_IMAGE_SIZE + 20,
+    maxHeight: PREVIEW_IMAGE_SIZE + 35,
     marginBottom: 10,
+    paddingTop: 10,
   },
   imagePreviewContent: {
-    paddingHorizontal: 5,
+    paddingHorizontal: 10,
   },
   imagePreview: {
-    marginHorizontal: 5,
+    marginHorizontal: 15,
     position: 'relative',
     borderRadius: 10,
-    overflow: 'hidden',
+    overflow: 'visible',
+    paddingTop: 10,
+    paddingHorizontal: 5,
   },
   previewImage: {
     width: PREVIEW_IMAGE_SIZE,
-    height: PREVIEW_IMAGE_SIZE,
+    height: PREVIEW_IMAGE_SIZE + 5,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   removeImage: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#fff',
+    top: 2,
+    right: -2,
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    elevation: 2,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 2,
+  },
+  removeIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
   },
   sendButton: {
     padding: 8,
