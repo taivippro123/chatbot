@@ -33,6 +33,19 @@ app.get('/conversation/:conversationId', authenticateToken, (req, res) => {
             return res.status(500).json({ message: 'Lỗi server' });
           }
 
+          // Parse image_urls JSON for each message
+          messages = messages.map(message => {
+            if (message.image_urls) {
+              try {
+                message.images = JSON.parse(message.image_urls);
+              } catch (e) {
+                console.error('Error parsing image_urls:', e);
+                message.images = [];
+              }
+            }
+            return message;
+          });
+
           res.json(messages);
         }
       );
@@ -40,8 +53,8 @@ app.get('/conversation/:conversationId', authenticateToken, (req, res) => {
   );
 });
 
-// Create message with multiple images
-app.post('/', authenticateToken, upload.array('images', 5), async (req, res) => {
+// Create message with optional images
+app.post('/', authenticateToken, upload.array('images'), (req, res) => {
   const { conversation_id, text } = req.body;
 
   // First verify conversation belongs to user
@@ -59,31 +72,21 @@ app.post('/', authenticateToken, upload.array('images', 5), async (req, res) => 
       }
 
       try {
-        let image_urls = [];
-        
-        // Upload all images to Cloudinary
+        let imageUrls = [];
         if (req.files && req.files.length > 0) {
-          console.log('Received files:', req.files.length);
-          
+          // Upload all images to Cloudinary
           for (const file of req.files) {
-            try {
-              const result = await cloudinary.uploader.upload(file.buffer, {
-                resource_type: 'auto',
-                folder: 'chat_images'
-              });
-              image_urls.push(result.secure_url);
-              console.log('Uploaded to Cloudinary:', result.secure_url);
-            } catch (uploadError) {
-              console.error('Error uploading image:', uploadError);
-            }
+            const result = await cloudinary.uploader.upload(
+              `data:${file.mimetype};base64,${file.buffer.toString('base64')}`
+            );
+            imageUrls.push(result.secure_url);
           }
         }
 
-        // Create message with all image URLs
-        const imageUrlsJson = JSON.stringify(image_urls);
+        // Create message with JSON array of image URLs
         req.db.query(
           'INSERT INTO messages (conversation_id, sender, text, image_urls) VALUES (?, ?, ?, ?)',
-          [conversation_id, 'user', text, imageUrlsJson],
+          [conversation_id, 'user', text, imageUrls.length > 0 ? JSON.stringify(imageUrls) : null],
           (err, result) => {
             if (err) {
               console.error('Create message error:', err);
@@ -101,13 +104,13 @@ app.post('/', authenticateToken, upload.array('images', 5), async (req, res) => 
                 }
 
                 const message = messages[0];
-                // Parse image_urls back to array
+                // Parse image_urls JSON for response
                 if (message.image_urls) {
                   try {
-                    message.image_urls = JSON.parse(message.image_urls);
+                    message.images = JSON.parse(message.image_urls);
                   } catch (e) {
                     console.error('Error parsing image_urls:', e);
-                    message.image_urls = [];
+                    message.images = [];
                   }
                 }
 
@@ -125,7 +128,7 @@ app.post('/', authenticateToken, upload.array('images', 5), async (req, res) => 
 });
 
 // Edit message
-app.put('/:id', authenticateToken, (req, res) => {
+app.put('/:id', authenticateToken, upload.array('images'), async (req, res) => {
   const { text } = req.body;
 
   // First verify message belongs to user's conversation
@@ -134,7 +137,7 @@ app.put('/:id', authenticateToken, (req, res) => {
      INNER JOIN conversations c ON m.conversation_id = c.id
      WHERE m.id = ? AND c.user_id = ?`,
     [req.params.id, req.user.id],
-    (err, messages) => {
+    async (err, messages) => {
       if (err) {
         console.error('Get message error:', err);
         return res.status(500).json({ message: 'Lỗi server' });
@@ -149,11 +152,28 @@ app.put('/:id', authenticateToken, (req, res) => {
         return res.status(403).json({ message: 'Không thể chỉnh sửa tin nhắn của AI' });
       }
 
-      // Update message
-      req.db.query(
-        'UPDATE messages SET text = ?, is_edited = true WHERE id = ?',
-        [text, req.params.id],
-        (err) => {
+      try {
+        let imageUrls = [];
+        if (req.files && req.files.length > 0) {
+          // Upload new images to Cloudinary
+          for (const file of req.files) {
+            const result = await cloudinary.uploader.upload(
+              `data:${file.mimetype};base64,${file.buffer.toString('base64')}`
+            );
+            imageUrls.push(result.secure_url);
+          }
+        }
+
+        // Update message with new text and/or images
+        const updateQuery = imageUrls.length > 0
+          ? 'UPDATE messages SET text = ?, image_urls = ?, is_edited = true WHERE id = ?'
+          : 'UPDATE messages SET text = ?, is_edited = true WHERE id = ?';
+        
+        const updateParams = imageUrls.length > 0
+          ? [text, JSON.stringify(imageUrls), req.params.id]
+          : [text, req.params.id];
+
+        req.db.query(updateQuery, updateParams, (err) => {
           if (err) {
             console.error('Update message error:', err);
             return res.status(500).json({ message: 'Lỗi server' });
@@ -169,14 +189,28 @@ app.put('/:id', authenticateToken, (req, res) => {
                 return res.status(500).json({ message: 'Lỗi server' });
               }
 
+              const updatedMessage = messages[0];
+              // Parse image_urls JSON for response
+              if (updatedMessage.image_urls) {
+                try {
+                  updatedMessage.images = JSON.parse(updatedMessage.image_urls);
+                } catch (e) {
+                  console.error('Error parsing image_urls:', e);
+                  updatedMessage.images = [];
+                }
+              }
+
               res.json({
                 message: 'Cập nhật tin nhắn thành công',
-                updatedMessage: messages[0]
+                updatedMessage
               });
             }
           );
-        }
-      );
+        });
+      } catch (error) {
+        console.error('Update message error:', error);
+        res.status(500).json({ message: 'Lỗi server' });
+      }
     }
   );
 });
@@ -227,4 +261,4 @@ app.post('/text-to-speech', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = app;
+module.exports = app; 

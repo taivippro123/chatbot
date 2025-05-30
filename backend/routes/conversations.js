@@ -51,7 +51,7 @@ app.get('/:id/messages', authenticateToken, async (req, res) => {
         conversation_id,
         sender,
         text,
-        image_url,
+        image_urls,
         audio_url,
         is_edited,
         created_at,
@@ -62,10 +62,23 @@ app.get('/:id/messages', authenticateToken, async (req, res) => {
       [req.params.id]
     );
 
+    // Parse image_urls JSON for each message
+    const parsedMessages = messages.map(message => {
+      if (message.image_urls) {
+        try {
+          message.images = JSON.parse(message.image_urls);
+        } catch (e) {
+          console.error('Error parsing image_urls:', e);
+          message.images = [];
+        }
+      }
+      return message;
+    });
+
     res.json({
       success: true,
       conversation: conversations[0],
-      messages: messages
+      messages: parsedMessages
     });
   } catch (error) {
     console.error('Error getting conversation messages:', error);
