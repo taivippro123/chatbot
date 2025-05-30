@@ -8,14 +8,13 @@ import {
   Keyboard,
   PanResponder 
 } from 'react-native';
+import { API_URL } from '@env';
 
 import Header from './Header';
 import MessageList from './MessageList';
 import InputBar from './InputBar';
 import Sidebar from './Sidebar';
-
-const API_URL = 'https://chatbot-erif.onrender.com/api';
-
+console.log('API_URL from env:', API_URL);
 export const chatAPI = {
   loadConversations: async (token) => {
     try {
@@ -96,6 +95,7 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayingId, setCurrentPlayingId] = useState(null);
+  const [conversationInputs, setConversationInputs] = useState({});
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -114,10 +114,19 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
 
   const handleConversationPress = async (id) => {
     try {
+      if (currentConversationId && inputText) {
+        setConversationInputs(prev => ({
+          ...prev,
+          [currentConversationId]: inputText
+        }));
+      }
+
       setIsLoading(true);
       const messages = await chatAPI.loadConversationMessages(token, id);
       setMessages(messages);
       setCurrentConversationId(id);
+      setInputText(conversationInputs[id] || '');
+      setSelectedImage(null);
       setIsSidebarOpen(false);
     } catch (error) {
       console.error('Error loading conversation:', error);
@@ -128,11 +137,20 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
 
   const handleNewChat = async () => {
     try {
+      if (currentConversationId && inputText) {
+        setConversationInputs(prev => ({
+          ...prev,
+          [currentConversationId]: inputText
+        }));
+      }
+
       setIsLoading(true);
       const newConversation = await chatAPI.createNewChat(token, t.newChat);
       setConversations(prev => [newConversation, ...prev]);
       setCurrentConversationId(newConversation.id);
       setMessages([]);
+      setInputText('');
+      setSelectedImage(null);
       setIsSidebarOpen(false);
     } catch (error) {
       console.error('Error creating new chat:', error);

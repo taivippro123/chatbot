@@ -9,7 +9,7 @@ const { authenticateToken } = require('../middleware/auth');
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Chat với AI
-app.post('/', authenticateToken, upload.single('image'), async (req, res) => {
+app.post('/', authenticateToken, upload.array('images'), async (req, res) => {
   try {
     const { message, conversation_id } = req.body;
     let conversationId = conversation_id;
@@ -61,27 +61,29 @@ app.post('/', authenticateToken, upload.single('image'), async (req, res) => {
 // Hàm xử lý chat
 async function processChat(req, res, conversationId, message) {
   try {
-    let userImageUrl = null;
-    let imageData = null;
+    let userImageUrls = [];
+    let imageDataArray = [];
 
-    if (req.file) {
-      // Xử lý và tải ảnh lên Cloudinary
-      const processedImage = await sharp(req.file.buffer)
-        .resize(512, 512, { fit: 'inside' })
-        .jpeg({ quality: 80 })
-        .toBuffer();
+    if (req.files && req.files.length > 0) {
+      // Xử lý và tải nhiều ảnh lên Cloudinary
+      for (const file of req.files) {
+        const processedImage = await sharp(file.buffer)
+          .resize(512, 512, { fit: 'inside' })
+          .jpeg({ quality: 80 })
+          .toBuffer();
 
-      const cloudinaryResult = await cloudinary.uploader.upload(
-        `data:image/jpeg;base64,${processedImage.toString('base64')}`
-      );
-      userImageUrl = cloudinaryResult.secure_url;
-      imageData = processedImage.toString('base64');
+        const cloudinaryResult = await cloudinary.uploader.upload(
+          `data:image/jpeg;base64,${processedImage.toString('base64')}`
+        );
+        userImageUrls.push(cloudinaryResult.secure_url);
+        imageDataArray.push(processedImage.toString('base64'));
+      }
     }
 
-    // Lưu tin nhắn người dùng
+    // Lưu tin nhắn người dùng với nhiều ảnh
     req.db.query(
-      'INSERT INTO messages (conversation_id, sender, text, image_url) VALUES (?, ?, ?, ?)',
-      [conversationId, 'user', message, userImageUrl],
+      'INSERT INTO messages (conversation_id, sender, text, image_urls) VALUES (?, ?, ?, ?)',
+      [conversationId, 'user', message, userImageUrls.length > 0 ? JSON.stringify(userImageUrls) : null],
       async (err, result) => {
         if (err) {
           console.error('Create user message error:', err);
@@ -92,18 +94,18 @@ async function processChat(req, res, conversationId, message) {
 
         // Chuẩn bị nội dung cho Gemini API
         const contents = [];
-        if (imageData) {
-          contents.push({
-            parts: [
-              { text: message || '' },
-              {
-                inline_data: {
-                  mime_type: 'image/jpeg',
-                  data: imageData
-                }
+        if (imageDataArray.length > 0) {
+          // Add text and all images to the content
+          const parts = [{ text: message || '' }];
+          imageDataArray.forEach(imageData => {
+            parts.push({
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: imageData
               }
-            ]
+            });
           });
+          contents.push({ parts });
         } else {
           contents.push({
             parts: [{ text: message }]
@@ -148,6 +150,16 @@ async function processChat(req, res, conversationId, message) {
 
                   const userMessage = messages.find(m => m.id === userMessageId);
                   const aiMessage = messages.find(m => m.id === aiMessageId);
+
+                  // Parse image_urls back to array if it exists
+                  if (userMessage && userMessage.image_urls) {
+                    try {
+                      userMessage.images = JSON.parse(userMessage.image_urls);
+                    } catch (e) {
+                      console.error('Error parsing image_urls:', e);
+                      userMessage.images = [];
+                    }
+                  }
 
                   res.json({
                     conversation_id: conversationId,

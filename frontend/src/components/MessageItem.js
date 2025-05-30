@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { detectSpeechLanguage } from '../utils/languageUtils';
 
 const { width } = Dimensions.get('window');
 const MAX_IMAGE_WIDTH = width * 0.6;
@@ -15,20 +16,23 @@ const MessageItem = ({
   language
 }) => {
   const isDark = theme === 'dark';
-  const timestamp = message.timestamp ? new Date(message.timestamp) : null;
-  const isValidDate = timestamp && !isNaN(timestamp.getTime());
-
-  // Detect language of text
-  const detectLanguage = (text) => {
-    // Simple language detection based on character set
-    const vietnamesePattern = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
-    return vietnamesePattern.test(text) ? 'vi-VN' : 'en-US';
+  const messageTime = message.created_at ? new Date(message.created_at) : null;
+  
+  // Format timestamp
+  const formatTime = (date) => {
+    if (!date) return '';
+    try {
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${minutes}`;
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return '';
+    }
   };
 
   const handlePlayAudio = () => {
-    // Use detected language or fallback to current UI language
-    const detectedLang = detectLanguage(message.text);
-    const speechLang = detectedLang || (language === 'vi' ? 'vi-VN' : 'en-US');
+    const speechLang = detectSpeechLanguage(message.text, language);
     onPlayAudio(message.id, message.text, speechLang);
   };
 
@@ -109,15 +113,13 @@ const MessageItem = ({
             />
           </TouchableOpacity>
         )}
-        {isValidDate && (
+        {messageTime && (
           <Text style={[
             styles.timestamp,
-            isUser ? styles.userTimestamp : styles.aiTimestamp
+            isUser ? styles.userTimestamp : styles.aiTimestamp,
+            isDark && !isUser ? { color: 'rgba(255, 255, 255, 0.5)' } : null
           ]}>
-            {timestamp.toLocaleTimeString([], { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            })}
+            {formatTime(messageTime)}
           </Text>
         )}
       </View>
@@ -179,9 +181,10 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   timestamp: {
-    fontSize: 12,
+    fontSize: 11,
+    marginTop: 5,
     alignSelf: 'flex-end',
-    marginTop: 4,
+    opacity: 0.8,
   },
   userTimestamp: {
     color: 'rgba(255, 255, 255, 0.7)',

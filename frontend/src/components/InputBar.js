@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   TextInput,
@@ -7,14 +7,15 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
-  Alert
+  Alert,
+  ScrollView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-
-const API_URL = 'https://chatbot-erif.onrender.com/api';
-
+import { API_URL } from '@env';
+import { getAPILanguage } from '../utils/languageUtils';
+console.log('API_URL from env:', API_URL);
 const InputBar = ({
   theme,
   inputText,
@@ -24,6 +25,7 @@ const InputBar = ({
   isRecording,
   setIsRecording,
   isLoading,
+  setIsLoading,
   language,
   t,
   token,
@@ -34,6 +36,92 @@ const InputBar = ({
 }) => {
   const recording = useRef(null);
   const isDark = theme === 'dark';
+  const [localInputText, setLocalInputText] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
+
+  // Update local input when parent input changes
+  React.useEffect(() => {
+    setLocalInputText(inputText);
+  }, [inputText]);
+
+  const requestPermissions = async () => {
+    const { status: imageStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (imageStatus !== 'granted' || cameraStatus !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant camera and photo library permissions');
+      return false;
+    }
+    return true;
+  };
+
+  const handleImageAction = () => {
+    Alert.alert(
+      'Select Image',
+      'Choose an option',
+      [
+        {
+          text: 'Take Photo',
+          onPress: () => launchCamera(),
+        },
+        {
+          text: 'Choose from Library',
+          onPress: () => pickImage(),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+    );
+  };
+
+  const launchCamera = async () => {
+    if (!await requestPermissions()) return;
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        const newImage = result.assets[0];
+        setSelectedImages(prev => [...prev, newImage.uri]);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Could not take photo');
+    }
+  };
+
+  const pickImage = async () => {
+    if (!await requestPermissions()) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        const newImages = result.assets.map(asset => asset.uri);
+        setSelectedImages(prev => [...prev, ...newImages]);
+      }
+    } catch (error) {
+      console.error('Error picking images:', error);
+      Alert.alert('Error', 'Could not pick images');
+    }
+  };
+
+  const removeImage = (index) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleStartRecording = async () => {
     try {
@@ -109,49 +197,39 @@ const InputBar = ({
     }
   };
 
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        setSelectedImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Could not pick image');
-    }
-  };
-
   const sendMessage = async () => {
-    if (!inputText.trim() && !selectedImage) return;
+    if (!localInputText.trim() && selectedImages.length === 0) return;
     if (!token) {
       Alert.alert('Error', 'Please login first');
       return;
     }
 
     try {
-      const formData = new FormData();
-      formData.append('message', inputText);
+      setIsSending(true);
+      const currentText = localInputText;
+      const currentImages = [...selectedImages];
+      
+      // Clear input immediately
+      setLocalInputText('');
+      setInputText('');
+      setSelectedImages([]);
 
-      let imageUrl = null;
-      if (selectedImage) {
-        const imageUri = Platform.OS === 'ios' ? selectedImage.replace('file://', '') : selectedImage;
+      const formData = new FormData();
+      formData.append('message', currentText);
+      formData.append('language', getAPILanguage(currentText, language));
+
+      // Append all images
+      currentImages.forEach((imageUri, index) => {
         const filename = imageUri.split('/').pop();
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-        formData.append('image', {
-          uri: imageUri,
+        formData.append('images', {
+          uri: Platform.OS === 'ios' ? imageUri.replace('file://', '') : imageUri,
           type,
           name: filename,
         });
-        imageUrl = selectedImage;
-      }
+      });
 
       if (currentConversationId) {
         formData.append('conversation_id', currentConversationId);
@@ -159,10 +237,10 @@ const InputBar = ({
 
       const userMessage = {
         id: Date.now().toString(),
-        text: inputText,
-        image: imageUrl,
+        text: currentText,
+        images: currentImages,
         sender: 'user',
-        timestamp: new Date()
+        created_at: new Date().toISOString()
       };
       setMessages(prev => [...prev, userMessage]);
 
@@ -193,18 +271,21 @@ const InputBar = ({
           ...messagesWithoutTemp,
           {
             ...data.userMessage,
-            image: data.userMessage.image || imageUrl
+            images: data.userMessage.images || currentImages
           },
           data.aiMessage
         ];
       });
-
-      setInputText('');
-      setSelectedImage(null);
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', error.message);
       setMessages(prev => prev.slice(0, -1));
+      // Restore input text and images if sending failed
+      setLocalInputText(currentText);
+      setInputText(currentText);
+      setSelectedImages(currentImages);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -213,31 +294,40 @@ const InputBar = ({
       styles.container,
       { backgroundColor: isDark ? '#40414f' : '#fff' }
     ]}>
-      {selectedImage && (
-        <View style={styles.imagePreview}>
-          <Image
-            source={{ uri: selectedImage }}
-            style={styles.previewImage}
-          />
-          <TouchableOpacity
-            style={styles.removeImage}
-            onPress={() => setSelectedImage(null)}
-          >
-            <Ionicons name="close-circle" size={24} color="#ff4444" />
-          </TouchableOpacity>
-        </View>
+      {selectedImages.length > 0 && (
+        <ScrollView 
+          horizontal 
+          style={styles.imagePreviewScroll}
+          showsHorizontalScrollIndicator={false}
+        >
+          {selectedImages.map((uri, index) => (
+            <View key={index} style={styles.imagePreview}>
+              <Image
+                source={{ uri }}
+                style={styles.previewImage}
+              />
+              <TouchableOpacity
+                style={styles.removeImage}
+                onPress={() => removeImage(index)}
+              >
+                <Ionicons name="close-circle" size={24} color="#ff4444" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
       )}
 
       <View style={styles.inputContainer}>
         <TouchableOpacity
           style={styles.button}
-          onPress={pickImage}
-          disabled={isLoading}
+          onPress={handleImageAction}
+          disabled={isLoading || isSending}
         >
           <Ionicons
             name="image-outline"
             size={24}
             color={isDark ? '#fff' : '#666'}
+            style={[isLoading || isSending ? { opacity: 0.5 } : null]}
           />
         </TouchableOpacity>
 
@@ -248,10 +338,13 @@ const InputBar = ({
           ]}
           placeholder={t.askAnything}
           placeholderTextColor={isDark ? '#8e8ea0' : '#999'}
-          value={inputText}
-          onChangeText={setInputText}
+          value={localInputText}
+          onChangeText={(text) => {
+            setLocalInputText(text);
+            setInputText(text);
+          }}
           multiline
-          editable={!isLoading}
+          editable={!isLoading && !isSending}
         />
 
         <TouchableOpacity
@@ -260,22 +353,24 @@ const InputBar = ({
             isRecording && styles.recordingButton
           ]}
           onPress={handleRecordPress}
-          disabled={isLoading}
+          disabled={isLoading || isSending}
         >
           <Ionicons
             name={isRecording ? "stop-circle" : "mic-outline"}
             size={24}
             color={isRecording ? '#ff4444' : (isDark ? '#fff' : '#666')}
+            style={[isLoading || isSending ? { opacity: 0.5 } : null]}
           />
         </TouchableOpacity>
 
-        {isLoading ? (
-          <ActivityIndicator color={isDark ? '#fff' : '#666'} />
+        {isSending ? (
+          <ActivityIndicator color={isDark ? '#fff' : '#007AFF'} style={styles.sendButton} />
         ) : (
-          inputText.trim() || selectedImage ? (
+          (localInputText.trim() || selectedImages.length > 0) ? (
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, styles.sendButton]}
               onPress={sendMessage}
+              disabled={isSending}
             >
               <Ionicons
                 name="send"
@@ -313,10 +408,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 68, 68, 0.1)',
     borderRadius: 20,
   },
-  imagePreview: {
+  imagePreviewScroll: {
+    flexGrow: 0,
     marginBottom: 10,
+  },
+  imagePreview: {
+    marginRight: 10,
     position: 'relative',
-    alignSelf: 'flex-start',
   },
   previewImage: {
     width: 100,
@@ -330,6 +428,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
   },
+  sendButton: {
+    padding: 8,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
 });
 
 export default InputBar; 

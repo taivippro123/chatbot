@@ -16,9 +16,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { translations } from '../translations';
 
-const API_URL = 'https://chatbot-erif.onrender.com/api';
+// const API_URL = 'https://chatbot-erif.onrender.com/api';
 // const API_URL = 'http://localhost:5000';
 // const API_URL = 'http://192.168.1.2:5000/api';
+import { API_URL } from '@env';
+
+console.log('API_URL from env:', API_URL);
 
 // Auth API functions
 export const authAPI = {

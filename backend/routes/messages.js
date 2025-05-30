@@ -40,8 +40,8 @@ app.get('/conversation/:conversationId', authenticateToken, (req, res) => {
   );
 });
 
-// Create message with optional image
-app.post('/', authenticateToken, upload.single('image'), (req, res) => {
+// Create message with multiple images
+app.post('/', authenticateToken, upload.array('images', 5), async (req, res) => {
   const { conversation_id, text } = req.body;
 
   // First verify conversation belongs to user
@@ -59,19 +59,31 @@ app.post('/', authenticateToken, upload.single('image'), (req, res) => {
       }
 
       try {
-        let image_url = null;
-        if (req.file) {
-          // Upload image to Cloudinary
-          const result = await cloudinary.uploader.upload(
-            `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
-          );
-          image_url = result.secure_url;
+        let image_urls = [];
+        
+        // Upload all images to Cloudinary
+        if (req.files && req.files.length > 0) {
+          console.log('Received files:', req.files.length);
+          
+          for (const file of req.files) {
+            try {
+              const result = await cloudinary.uploader.upload(file.buffer, {
+                resource_type: 'auto',
+                folder: 'chat_images'
+              });
+              image_urls.push(result.secure_url);
+              console.log('Uploaded to Cloudinary:', result.secure_url);
+            } catch (uploadError) {
+              console.error('Error uploading image:', uploadError);
+            }
+          }
         }
 
-        // Create message
+        // Create message with all image URLs
+        const imageUrlsJson = JSON.stringify(image_urls);
         req.db.query(
-          'INSERT INTO messages (conversation_id, sender, text, image_url) VALUES (?, ?, ?, ?)',
-          [conversation_id, 'user', text, image_url],
+          'INSERT INTO messages (conversation_id, sender, text, image_urls) VALUES (?, ?, ?, ?)',
+          [conversation_id, 'user', text, imageUrlsJson],
           (err, result) => {
             if (err) {
               console.error('Create message error:', err);
@@ -88,7 +100,18 @@ app.post('/', authenticateToken, upload.single('image'), (req, res) => {
                   return res.status(500).json({ message: 'Lỗi server' });
                 }
 
-                res.status(201).json(messages[0]);
+                const message = messages[0];
+                // Parse image_urls back to array
+                if (message.image_urls) {
+                  try {
+                    message.image_urls = JSON.parse(message.image_urls);
+                  } catch (e) {
+                    console.error('Error parsing image_urls:', e);
+                    message.image_urls = [];
+                  }
+                }
+
+                res.status(201).json(message);
               }
             );
           }
@@ -204,4 +227,4 @@ app.post('/text-to-speech', authenticateToken, async (req, res) => {
   }
 });
 
-module.exports = app; 
+module.exports = app;
