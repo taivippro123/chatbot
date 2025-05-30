@@ -18,8 +18,7 @@ import { API_URL } from '@env';
 import { getAPILanguage } from '../utils/languageUtils';
 
 const { width } = Dimensions.get('window');
-const PREVIEW_IMAGE_SIZE = width * 0.25;
-const PREVIEW_CONTAINER_HEIGHT = PREVIEW_IMAGE_SIZE + 20;
+const PREVIEW_IMAGE_SIZE = width * 0.2;
 
 console.log('API_URL from env:', API_URL);
 
@@ -435,43 +434,34 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 68, 68, 0.1)',
   },
   imagePreviewScroll: {
-    height: PREVIEW_CONTAINER_HEIGHT,
+    maxHeight: PREVIEW_IMAGE_SIZE + 20,
     marginBottom: 10,
   },
   imagePreviewContent: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 5,
   },
   imagePreview: {
     marginHorizontal: 5,
     position: 'relative',
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
   },
   previewImage: {
     width: PREVIEW_IMAGE_SIZE,
     height: PREVIEW_IMAGE_SIZE,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   removeImage: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: -5,
+    right: -5,
     backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 2,
-    elevation: 4,
+    borderRadius: 12,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    zIndex: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   sendButton: {
     padding: 8,

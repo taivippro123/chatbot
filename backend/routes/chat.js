@@ -11,7 +11,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Chat với AI
 app.post('/', authenticateToken, upload.array('images'), async (req, res) => {
   try {
-    const { text, conversation_id } = req.body;
+    const { message, conversation_id } = req.body;
     let conversationId = conversation_id;
 
     // Lấy hoặc tạo cuộc hội thoại mới
@@ -30,14 +30,14 @@ app.post('/', authenticateToken, upload.array('images'), async (req, res) => {
             return res.status(404).json({ message: 'Không tìm thấy cuộc hội thoại' });
           }
 
-          await processChat(req, res, conversationId, text);
+          await processChat(req, res, conversationId, message);
         }
       );
     } else {
       // Tạo cuộc hội thoại mới
       req.db.query(
         'INSERT INTO conversations (user_id, title) VALUES (?, ?)',
-        [req.user.id, text?.substring(0, 50) + '...' || 'New Chat'],
+        [req.user.id, message.substring(0, 50) + '...'],
         async (err, result) => {
           if (err) {
             console.error('Create conversation error:', err);
@@ -45,7 +45,7 @@ app.post('/', authenticateToken, upload.array('images'), async (req, res) => {
           }
 
           conversationId = result.insertId;
-          await processChat(req, res, conversationId, text);
+          await processChat(req, res, conversationId, message);
         }
       );
     }
@@ -59,7 +59,7 @@ app.post('/', authenticateToken, upload.array('images'), async (req, res) => {
 });
 
 // Hàm xử lý chat
-async function processChat(req, res, conversationId, text) {
+async function processChat(req, res, conversationId, message) {
   try {
     let userImageUrls = [];
     let imageDataArray = [];
@@ -83,7 +83,7 @@ async function processChat(req, res, conversationId, text) {
     // Lưu tin nhắn người dùng với nhiều ảnh
     req.db.query(
       'INSERT INTO messages (conversation_id, sender, text, image_urls) VALUES (?, ?, ?, ?)',
-      [conversationId, 'user', text || '', userImageUrls.length > 0 ? JSON.stringify(userImageUrls) : null],
+      [conversationId, 'user', message, userImageUrls.length > 0 ? JSON.stringify(userImageUrls) : null],
       async (err, result) => {
         if (err) {
           console.error('Create user message error:', err);
@@ -96,7 +96,7 @@ async function processChat(req, res, conversationId, text) {
         const contents = [];
         if (imageDataArray.length > 0) {
           // Add text and all images to the content
-          const parts = [{ text: text || '' }];
+          const parts = [{ text: message || '' }];
           imageDataArray.forEach(imageData => {
             parts.push({
               inline_data: {
@@ -108,7 +108,7 @@ async function processChat(req, res, conversationId, text) {
           contents.push({ parts });
         } else {
           contents.push({
-            parts: [{ text: text || '' }]
+            parts: [{ text: message }]
           });
         }
 

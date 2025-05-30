@@ -4,9 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { detectSpeechLanguage } from '../utils/languageUtils';
 
 const { width } = Dimensions.get('window');
-const MAX_IMAGE_WIDTH = width * 0.65;
-const MAX_IMAGE_HEIGHT = width * 0.5;
-const MULTI_IMAGE_WIDTH = width * 0.45;
+const MAX_IMAGE_WIDTH = width * 0.6;
+const MAX_IMAGE_HEIGHT = width * 0.6;
 
 const MessageItem = ({ 
   message, 
@@ -41,12 +40,6 @@ const MessageItem = ({
   // Process text for markdown-style bold
   const renderFormattedText = (text) => {
     if (!text) return null;
-    
-    // If text is an object, try to extract the text content
-    if (typeof text === 'object') {
-      console.warn('Text is an object:', text);
-      return null;
-    }
     
     // Split text by bold markers (**text**)
     const parts = text.split(/(\*\*.*?\*\*)/g);
@@ -85,12 +78,6 @@ const MessageItem = ({
   // Get images array from message
   const getImages = () => {
     try {
-      // First check message.images from API response
-      if (message.images) {
-        return Array.isArray(message.images) ? message.images : [];
-      }
-      
-      // Then check image_urls
       if (message.image_urls) {
         // If image_urls is already an array, use it directly
         if (Array.isArray(message.image_urls)) {
@@ -125,22 +112,21 @@ const MessageItem = ({
           <View style={styles.imagesContainer}>
             {images.length === 1 ? (
               // Single image view
-              <View style={styles.singleImageContainer}>
-                <Image
-                  source={{ uri: images[0] }}
-                  style={styles.singleImage}
-                  resizeMode="cover"
-                />
-              </View>
+              <Image
+                source={{ uri: images[0] }}
+                style={styles.singleImage}
+                resizeMode="cover"
+              />
             ) : (
-              // Multiple images view with grid layout
-              <View style={styles.multiImageContainer}>
+              // Multiple images view
+              <ScrollView 
+                horizontal={true} 
+                showsHorizontalScrollIndicator={false}
+                style={styles.imageScrollView}
+                contentContainerStyle={styles.imageScrollContent}
+              >
                 {images.map((imageUrl, index) => (
-                  <View key={index} style={[
-                    styles.imageContainer,
-                    index % 2 === 1 && styles.imageContainerRight,
-                    index >= 2 && styles.imageContainerBottom
-                  ]}>
+                  <View key={index} style={styles.imageContainer}>
                     <Image
                       source={{ uri: imageUrl }}
                       style={styles.image}
@@ -148,15 +134,12 @@ const MessageItem = ({
                     />
                   </View>
                 ))}
-              </View>
+              </ScrollView>
             )}
           </View>
         )}
         {message.text && (
-          <View style={[
-            styles.textContainer,
-            images.length > 0 && styles.textWithImages
-          ]}>
+          <View style={styles.textContainer}>
             {renderFormattedText(message.text)}
           </View>
         )}
@@ -193,7 +176,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 8,
     marginVertical: 2,
-    maxWidth: '90%',
+    maxWidth: '85%',
   },
   userContainer: {
     alignSelf: 'flex-end',
@@ -205,11 +188,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 12,
     minWidth: 100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
   },
   userBubble: {
     backgroundColor: '#007AFF',
@@ -223,47 +201,30 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     overflow: 'hidden',
   },
-  singleImageContainer: {
-    borderRadius: 15,
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-  },
   singleImage: {
     width: MAX_IMAGE_WIDTH,
     height: MAX_IMAGE_HEIGHT,
     borderRadius: 15,
   },
-  multiImageContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    width: MAX_IMAGE_WIDTH,
+  imageScrollView: {
+    maxHeight: MAX_IMAGE_HEIGHT,
+  },
+  imageScrollContent: {
+    paddingRight: 10,
   },
   imageContainer: {
-    width: MULTI_IMAGE_WIDTH,
-    height: MULTI_IMAGE_WIDTH,
-    marginBottom: 2,
-    marginRight: 2,
-    borderRadius: 10,
+    marginRight: 8,
+    borderRadius: 15,
     overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-  },
-  imageContainerRight: {
-    marginRight: 0,
-  },
-  imageContainerBottom: {
-    marginBottom: 0,
   },
   image: {
-    width: '100%',
-    height: '100%',
+    width: MAX_IMAGE_WIDTH * 0.7,
+    height: MAX_IMAGE_HEIGHT,
+    borderRadius: 15,
   },
   textContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-  textWithImages: {
-    marginTop: 8,
   },
   text: {
     fontSize: 16,
