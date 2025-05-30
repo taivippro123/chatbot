@@ -151,14 +151,39 @@ async function processChat(req, res, conversationId, message) {
                   const userMessage = messages.find(m => m.id === userMessageId);
                   const aiMessage = messages.find(m => m.id === aiMessageId);
 
-                  // Parse image_urls back to array if it exists
+                  // Parse image_urls cho user message
                   if (userMessage && userMessage.image_urls) {
                     try {
-                      userMessage.images = JSON.parse(userMessage.image_urls);
+                      // Check if image_urls is already an array
+                      if (Array.isArray(userMessage.image_urls)) {
+                        userMessage.images = userMessage.image_urls;
+                      }
+                      // Check if it's a JSON string
+                      else if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('[')) {
+                        userMessage.images = JSON.parse(userMessage.image_urls);
+                      }
+                      // If it's a single URL string
+                      else if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('http')) {
+                        userMessage.images = [userMessage.image_urls];
+                      }
+                      // Default to empty array if none of the above
+                      else {
+                        userMessage.images = [];
+                      }
                     } catch (e) {
                       console.error('Error parsing image_urls:', e);
-                      userMessage.images = [];
+                      // If parsing fails but it's a URL string
+                      if (typeof userMessage.image_urls === 'string' && userMessage.image_urls.startsWith('http')) {
+                        userMessage.images = [userMessage.image_urls];
+                      } else {
+                        userMessage.images = userImageUrls; // Use the original array
+                      }
                     }
+                  }
+
+                  // Ensure text field is preserved
+                  if (!userMessage.text && message) {
+                    userMessage.text = message;
                   }
 
                   res.json({
@@ -172,10 +197,18 @@ async function processChat(req, res, conversationId, message) {
           );
         } catch (error) {
           console.error('Gemini API error:', error);
-          res.status(500).json({ 
-            message: 'Lỗi khi gọi API Gemini',
-            error: error.message 
-          });
+          // Check if it's a token limit error
+          if (error.response?.data?.error?.message?.includes('quota')) {
+            res.status(429).json({ 
+              message: 'API quota exceeded. Please try again later.',
+              error: 'QUOTA_EXCEEDED'
+            });
+          } else {
+            res.status(500).json({ 
+              message: 'Lỗi khi gọi API Gemini',
+              error: error.message 
+            });
+          }
         }
       }
     );
