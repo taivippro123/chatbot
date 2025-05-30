@@ -66,11 +66,33 @@ app.get('/:id/messages', authenticateToken, async (req, res) => {
     const parsedMessages = messages.map(message => {
       if (message.image_urls) {
         try {
-          message.images = JSON.parse(message.image_urls);
+          // Check if image_urls is already an array
+          if (Array.isArray(message.image_urls)) {
+            message.images = message.image_urls;
+          } 
+          // Check if it's a JSON string
+          else if (typeof message.image_urls === 'string' && message.image_urls.startsWith('[')) {
+            message.images = JSON.parse(message.image_urls);
+          }
+          // If it's a single URL string
+          else if (typeof message.image_urls === 'string') {
+            message.images = [message.image_urls];
+          }
+          // Default to empty array if none of the above
+          else {
+            message.images = [];
+          }
         } catch (e) {
           console.error('Error parsing image_urls:', e);
-          message.images = [];
+          // If parsing fails, check if it's a URL string
+          if (typeof message.image_urls === 'string' && message.image_urls.startsWith('http')) {
+            message.images = [message.image_urls];
+          } else {
+            message.images = [];
+          }
         }
+      } else {
+        message.images = [];
       }
       return message;
     });
