@@ -87,30 +87,37 @@ async function processChat(req, res, conversationId, message) {
       async (err, result) => {
         if (err) {
           console.error('Create user message error:', err);
-          return res.status(500).json({ message: 'Lỗi server' });
+          return res.status(500).json({ message: 'Server error' });
         }
 
         const userMessageId = result.insertId;
 
         // Chuẩn bị nội dung cho Gemini API
-        const contents = [];
-        if (imageDataArray.length > 0) {
-          // Add text and all images to the content
-          const parts = [{ text: message || '' }];
-          imageDataArray.forEach(imageData => {
-            parts.push({
-              inline_data: {
-                mime_type: 'image/jpeg',
-                data: imageData
-              }
-            });
-          });
-          contents.push({ parts });
-        } else {
-          contents.push({
-            parts: [{ text: message }]
-          });
+        const parts = [];
+        
+        // Always add text part if message exists
+        if (message && message.trim()) {
+          parts.push({ text: message.trim() });
         }
+
+        // Add image parts if they exist
+        imageDataArray.forEach(imageData => {
+          parts.push({
+            inline_data: {
+              mime_type: 'image/jpeg',
+              data: imageData
+            }
+          });
+        });
+
+        // Ensure there's at least an empty text part if no content
+        if (parts.length === 0) {
+          parts.push({ text: '' });
+        }
+
+        const contents = [{
+          parts
+        }];
 
         try {
           // Gọi API Gemini
@@ -124,7 +131,7 @@ async function processChat(req, res, conversationId, message) {
             }
           );
 
-          const aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text || 'Không có phản hồi từ AI.';
+          const aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from AI.';
 
           // Lưu phản hồi của AI
           req.db.query(

@@ -218,7 +218,7 @@ const InputBar = ({
 
     try {
       setIsSending(true);
-      const currentText = localInputText;
+      const currentText = localInputText.trim();
       const currentImages = [...selectedImages];
       
       // Clear input immediately
@@ -227,6 +227,8 @@ const InputBar = ({
       setSelectedImages([]);
 
       const formData = new FormData();
+      
+      // Always append text, even if empty (to maintain consistency)
       formData.append('text', currentText);
       formData.append('language', getAPILanguage(currentText, language));
 
@@ -268,35 +270,52 @@ const InputBar = ({
       });
 
       if (!response.ok) {
-        throw new Error(t.failedToSendMessage || 'Failed to send message');
+        throw new Error(await response.text());
       }
 
       const data = await response.json();
 
-      if (!currentConversationId) {
+      if (!currentConversationId && data.conversation_id) {
         setCurrentConversationId(data.conversation_id);
-        loadConversations();
+        loadConversations && loadConversations();
       }
 
+      // Update messages with server response
       setMessages(prev => {
         const messagesWithoutTemp = prev.slice(0, -1);
+        const updatedUserMessage = {
+          ...data.userMessage,
+          text: data.userMessage.text || currentText, // Ensure text is preserved
+          images: data.userMessage.images || currentImages // Ensure images are preserved
+        };
         return [
           ...messagesWithoutTemp,
-          {
-            ...data.userMessage,
-            images: data.userMessage.images || currentImages
-          },
+          updatedUserMessage,
           data.aiMessage
         ];
       });
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert(t.error || 'Error', error.message);
+      // Remove temporary message
       setMessages(prev => prev.slice(0, -1));
-      // Restore input text and images if sending failed
+      
+      // Restore input state
       setLocalInputText(currentText);
       setInputText(currentText);
       setSelectedImages(currentImages);
+
+      // Show appropriate error message
+      if (error.message.includes('quota')) {
+        Alert.alert(
+          t.error || 'Error',
+          t.apiQuotaExceeded || 'API quota exceeded. Please try again later.'
+        );
+      } else {
+        Alert.alert(
+          t.error || 'Error',
+          t.failedToSendMessage || 'Failed to send message. Please try again.'
+        );
+      }
     } finally {
       setIsSending(false);
     }
