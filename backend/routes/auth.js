@@ -91,9 +91,17 @@ app.post('/register', async (req, res) => {
 // Login
 app.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, dateOfBirth } = req.body;
     console.log('Login request body:', req.body); // Log full request body
     console.log('Login request headers:', req.headers); // Log request headers
+
+    // Validate input
+    if (!email || !password || !dateOfBirth) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Please provide email, password and date of birth' 
+      });
+    }
 
     // Find user
     const [rows] = await req.db.promise().query(
@@ -116,6 +124,17 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ 
         success: false,
         message: 'Invalid email or password' 
+      });
+    }
+
+    // Check date of birth
+    const userDateOfBirth = new Date(user.dateOfBirth).toISOString().split('T')[0];
+    const providedDateOfBirth = new Date(dateOfBirth).toISOString().split('T')[0];
+    
+    if (userDateOfBirth !== providedDateOfBirth) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid date of birth' 
       });
     }
 
