@@ -29,6 +29,15 @@ app.post('/register', async (req, res) => {
       });
     }
 
+    // Validate date format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(dateOfBirth)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format. Use YYYY-MM-DD'
+      });
+    }
+
     // Check if user already exists
     const [rows] = await req.db.promise().query(
       'SELECT * FROM users WHERE email = ?',
@@ -103,6 +112,15 @@ app.post('/login', async (req, res) => {
       });
     }
 
+    // Validate date format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(dateOfBirth)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format. Use YYYY-MM-DD'
+      });
+    }
+
     // Find user
     const [rows] = await req.db.promise().query(
       'SELECT * FROM users WHERE email = ?',
@@ -129,9 +147,7 @@ app.post('/login', async (req, res) => {
 
     // Check date of birth
     const userDateOfBirth = new Date(user.dateOfBirth).toISOString().split('T')[0];
-    const providedDateOfBirth = new Date(dateOfBirth).toISOString().split('T')[0];
-    
-    if (userDateOfBirth !== providedDateOfBirth) {
+    if (userDateOfBirth !== dateOfBirth) {
       return res.status(401).json({ 
         success: false,
         message: 'Invalid date of birth' 
