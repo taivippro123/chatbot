@@ -17,12 +17,12 @@ app.use((err, req, res, next) => {
 // Register
 app.post('/register', async (req, res) => {
   try {
-    const { email, password, name } = req.body;
+    const { email, password, name, dateOfBirth } = req.body;
     console.log('Register request body:', req.body); // Log full request body
     console.log('Register request headers:', req.headers); // Log request headers
     
     // Validate input
-    if (!email || !password || !name) {
+    if (!email || !password || !name || !dateOfBirth) {
       return res.status(400).json({ 
         success: false,
         message: 'Please provide all required fields' 
@@ -47,8 +47,8 @@ app.post('/register', async (req, res) => {
 
     // Create user
     const [result] = await req.db.promise().query(
-      'INSERT INTO users (email, password, name) VALUES (?, ?, ?)',
-      [email, hashedPassword, name]
+      'INSERT INTO users (email, password, name, dateOfBirth) VALUES (?, ?, ?, ?)',
+      [email, hashedPassword, name, dateOfBirth]
     );
 
     // Create default settings
@@ -66,7 +66,7 @@ app.post('/register', async (req, res) => {
 
     // Get created user
     const [users] = await req.db.promise().query(
-      'SELECT id, email, name FROM users WHERE id = ?',
+      'SELECT id, email, name, dateOfBirth FROM users WHERE id = ?',
       [result.insertId]
     );
 
@@ -133,7 +133,8 @@ app.post('/login', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        avatar_url: user.avatar_url
+        avatar_url: user.avatar_url,
+        dateOfBirth: user.dateOfBirth
       }
     };
 
@@ -202,7 +203,7 @@ app.post('/change-password', authenticateToken, async (req, res) => {
 // Get current user
 app.get('/me', authenticateToken, (req, res) => {
   req.db.query(
-    'SELECT id, email, name, avatar_url FROM users WHERE id = ?',
+    'SELECT id, email, name, avatar_url, dateOfBirth FROM users WHERE id = ?',
     [req.user.id],
     (err, results) => {
       if (err) {
