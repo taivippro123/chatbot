@@ -14,14 +14,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { API_URL } from '@env';
+// import { API_URL } from '@env';
+import { API_URL } from '../config/api';
+console.log('API_URL:', API_URL);
 import { getAPILanguage } from '../utils/languageUtils';
 
 const { width } = Dimensions.get('window');
 const PREVIEW_IMAGE_SIZE = width * 0.2;
 const MAX_IMAGES = 5;
 
-console.log('API_URL from env:', API_URL);
 
 const InputBar = ({
   theme,
@@ -227,6 +228,41 @@ const InputBar = ({
       setInputText('');
       setSelectedImages([]);
 
+      // If no conversation exists, create a new one first
+      let conversationId = currentConversationId;
+      if (!conversationId) {
+        try {
+          const createResponse = await fetch(`${API_URL}/conversations`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ title: currentText.substring(0, 30) || 'New Chat' })
+          });
+
+          if (!createResponse.ok) {
+            throw new Error('Failed to create conversation');
+          }
+
+          const createData = await createResponse.json();
+          if (createData.success && createData.conversation) {
+            conversationId = createData.conversation.id;
+            if (typeof setCurrentConversationId === 'function') {
+              setCurrentConversationId(conversationId);
+            }
+            if (typeof loadConversations === 'function') {
+              loadConversations();
+            }
+          } else {
+            throw new Error(createData.message || 'Failed to create conversation');
+          }
+        } catch (error) {
+          console.error('Error creating conversation:', error);
+          throw error;
+        }
+      }
+
       const formData = new FormData();
       
       // Always append text, even if empty (to maintain consistency)
@@ -246,9 +282,7 @@ const InputBar = ({
         });
       });
 
-      if (currentConversationId) {
-        formData.append('conversation_id', currentConversationId);
-      }
+      formData.append('conversation_id', conversationId);
 
       // Add temporary message
       const userMessage = {
@@ -276,18 +310,13 @@ const InputBar = ({
 
       const data = await response.json();
 
-      if (!currentConversationId && data.conversation_id) {
-        setCurrentConversationId(data.conversation_id);
-        loadConversations && loadConversations();
-      }
-
       // Update messages with server response
       setMessages(prev => {
         const messagesWithoutTemp = prev.slice(0, -1);
         const updatedUserMessage = {
           ...data.userMessage,
-          text: data.userMessage.text || currentText, // Ensure text is preserved
-          images: data.userMessage.images || currentImages // Ensure images are preserved
+          text: currentText,
+          images: currentImages
         };
         return [
           ...messagesWithoutTemp,

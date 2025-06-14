@@ -15,13 +15,13 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { translations } from '../translations';
-
-// const API_URL = 'https://chatbot-erif.onrender.com/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { API_URL } from '../config/api';
 // const API_URL = 'http://localhost:5000';
 // const API_URL = 'http://192.168.1.2:5000/api';
-import { API_URL } from '@env';
+// import { API_URL } from '@env';
 
-console.log('API_URL from env:', API_URL);
+console.log('API_URL:', API_URL);
 
 // Auth API functions
 export const authAPI = {
@@ -57,36 +57,56 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const t = translations[language];
 
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDateOfBirth(selectedDate);
+    }
+  };
+
+  const formatDateForMySQL = (date) => {
+    if (!date) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleAuth = async () => {
-    if (!email || !password || (!isLogin && !name)) {
+    if (!email || !password || !dateOfBirth || (!isLogin && !name)) {
       Alert.alert(t.error, t.fillAllFields);
       return;
     }
 
     setIsLoading(true);
     try {
-      console.log('Making request to:', `${API_URL}/auth/${isLogin ? 'login' : 'register'}`);
-      
+      const formattedDate = formatDateForMySQL(dateOfBirth);
+      const requestBody = {
+        email,
+        password,
+        dateOfBirth: formattedDate,
+        ...(isLogin ? {} : { name })
+      };
+      // Log request body in JSON format like Postman
+      console.log('Request body (JSON):', JSON.stringify(requestBody, null, 2));
+
       const response = await fetch(`${API_URL}/auth/${isLogin ? 'login' : 'register'}`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(isLogin ? { email, password } : { email, password, name }),
+        body: JSON.stringify(requestBody),
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers.map);
-      
-      // Get response text first to debug
       const responseText = await response.text();
       console.log('Response text:', responseText);
-      
-      // Try to parse as JSON
+
       let data;
       try {
         data = JSON.parse(responseText);
@@ -105,7 +125,7 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
       onAuthSuccess(data.token, data.user);
     } catch (error) {
       console.error('Auth error:', error);
-      Alert.alert(t.error, t.networkError);
+      Alert.alert(t.error, error.message || t.networkError);
     } finally {
       setIsLoading(false);
     }
@@ -174,6 +194,25 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
           />
 
           <TouchableOpacity
+            style={styles.dateInput}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Text style={styles.dateInputText}>
+              {dateOfBirth ? formatDateForMySQL(dateOfBirth) : 'Select Date of Birth'}
+            </Text>
+          </TouchableOpacity>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={dateOfBirth}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+              maximumDate={new Date()}
+            />
+          )}
+
+          <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleAuth}
             disabled={isLoading}
@@ -194,6 +233,8 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
               setEmail('');
               setPassword('');
               setName('');
+              setDateOfBirth(new Date());
+              setShowDatePicker(false);
             }}
           >
             <Text style={styles.switchText}>
@@ -266,6 +307,21 @@ const styles = StyleSheet.create({
   switchText: {
     color: '#007AFF',
     fontSize: 14,
+  },
+  dateInput: {
+    width: '100%',
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  dateInputText: {
+    fontSize: 16,
+    color: '#000000',
   },
 });
 

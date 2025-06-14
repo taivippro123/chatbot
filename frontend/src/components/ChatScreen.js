@@ -8,13 +8,14 @@ import {
   Keyboard,
   PanResponder 
 } from 'react-native';
-import { API_URL } from '@env';
+// import { API_URL } from '@env';
 
 import Header from './Header';
 import MessageList from './MessageList';
 import InputBar from './InputBar';
 import Sidebar from './Sidebar';
-console.log('API_URL from env:', API_URL);
+import { API_URL } from '../config/api';
+console.log('API_URL:', API_URL);
 export const chatAPI = {
   loadConversations: async (token) => {
     try {
@@ -74,6 +75,7 @@ export const chatAPI = {
 
       const data = await response.json();
       if (data.success) {
+        console.log('data.conversation:', data.conversation);
         return data.conversation;
       }
       throw new Error(data.message || 'Failed to create conversation');
@@ -82,6 +84,7 @@ export const chatAPI = {
       throw error;
     }
   }
+  
 };
 
 const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
@@ -97,16 +100,16 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
   const [currentPlayingId, setCurrentPlayingId] = useState(null);
   const [conversationInputs, setConversationInputs] = useState({});
 
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        const conversationsData = await chatAPI.loadConversations(token);
-        setConversations(conversationsData);
-      } catch (error) {
-        console.error('Error loading initial data:', error);
-      }
-    };
+  const loadInitialData = async () => {
+    try {
+      const conversationsData = await chatAPI.loadConversations(token);
+      setConversations(conversationsData);
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+    }
+  };
 
+  useEffect(() => {
     if (token) {
       loadInitialData();
     }
@@ -159,7 +162,6 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
     }
   };
 
-
   const panResponder = PanResponder.create({
     onMoveShouldSetPanResponder: (_, gestureState) => {
       // Nếu người dùng vuốt từ trái sang phải một đoạn đáng kể
@@ -201,6 +203,7 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
         theme={theme}
         token={token}
         currentConversationId={currentConversationId}
+        setCurrentConversationId={setCurrentConversationId}
         inputText={inputText}
         setInputText={setInputText}
         selectedImage={selectedImage}
@@ -210,6 +213,7 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
         isLoading={isLoading}
         setMessages={setMessages}
         t={t}
+        loadConversations={loadInitialData}
       />
 
       {isSidebarOpen && (
