@@ -17,24 +17,15 @@ app.use((err, req, res, next) => {
 // Register
 app.post('/register', async (req, res) => {
   try {
-    const { email, password, name, dateOfBirth } = req.body;
+    const { email, password, name } = req.body;
     console.log('Register request body:', req.body); // Log full request body
     console.log('Register request headers:', req.headers); // Log request headers
     
     // Validate input
-    if (!email || !password || !name || !dateOfBirth) {
+    if (!email || !password || !name) {
       return res.status(400).json({ 
         success: false,
         message: 'Please provide all required fields' 
-      });
-    }
-
-    // Validate date format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(dateOfBirth)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid date format. Use YYYY-MM-DD'
       });
     }
 
@@ -56,8 +47,8 @@ app.post('/register', async (req, res) => {
 
     // Create user
     const [result] = await req.db.promise().query(
-      'INSERT INTO users (email, password, name, dateOfBirth) VALUES (?, ?, ?, ?)',
-      [email, hashedPassword, name, dateOfBirth]
+      'INSERT INTO users (email, password, name) VALUES (?, ?, ?)',
+      [email, hashedPassword, name]
     );
 
     // Create default settings
@@ -75,7 +66,7 @@ app.post('/register', async (req, res) => {
 
     // Get created user
     const [users] = await req.db.promise().query(
-      'SELECT id, email, name, dateOfBirth FROM users WHERE id = ?',
+      'SELECT id, email, name FROM users WHERE id = ?',
       [result.insertId]
     );
 
@@ -100,24 +91,15 @@ app.post('/register', async (req, res) => {
 // Login
 app.post('/login', async (req, res) => {
   try {
-    const { email, password, dateOfBirth } = req.body;
+    const { email, password } = req.body;
     console.log('Login request body:', req.body); // Log full request body
     console.log('Login request headers:', req.headers); // Log request headers
 
     // Validate input
-    if (!email || !password || !dateOfBirth) {
+    if (!email || !password) {
       return res.status(400).json({ 
         success: false,
-        message: 'Please provide email, password and date of birth' 
-      });
-    }
-
-    // Validate date format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(dateOfBirth)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid date format. Use YYYY-MM-DD'
+        message: 'Please provide email and password' 
       });
     }
 
@@ -145,15 +127,6 @@ app.post('/login', async (req, res) => {
       });
     }
 
-    // Check date of birth
-    const userDateOfBirth = new Date(user.dateOfBirth).toISOString().split('T')[0];
-    if (userDateOfBirth !== dateOfBirth) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Invalid date of birth' 
-      });
-    }
-
     // Generate token
     const token = jwt.sign(
       { id: user.id },
@@ -168,8 +141,7 @@ app.post('/login', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        avatar_url: user.avatar_url,
-        dateOfBirth: user.dateOfBirth
+        avatar_url: user.avatar_url
       }
     };
 

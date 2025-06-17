@@ -15,7 +15,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { translations } from '../translations';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { API_URL } from '../config/api';
 // const API_URL = 'http://localhost:5000';
 // const API_URL = 'http://192.168.1.2:5000/api';
@@ -57,39 +56,20 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const t = translations[language];
 
-  const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setDateOfBirth(selectedDate);
-    }
-  };
-
-  const formatDateForMySQL = (date) => {
-    if (!date) return '';
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
   const handleAuth = async () => {
-    if (!email || !password || !dateOfBirth || (!isLogin && !name)) {
+    if (!email || !password || (!isLogin && !name)) {
       Alert.alert(t.error, t.fillAllFields);
       return;
     }
 
     setIsLoading(true);
     try {
-      const formattedDate = formatDateForMySQL(dateOfBirth);
       const requestBody = {
         email,
         password,
-        dateOfBirth: formattedDate,
         ...(isLogin ? {} : { name })
       };
       // Log request body in JSON format like Postman
@@ -194,25 +174,6 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
           />
 
           <TouchableOpacity
-            style={styles.dateInput}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text style={styles.dateInputText}>
-              {dateOfBirth ? formatDateForMySQL(dateOfBirth) : 'Select Date of Birth'}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={dateOfBirth}
-              mode="date"
-              display="default"
-              onChange={handleDateChange}
-              maximumDate={new Date()}
-            />
-          )}
-
-          <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleAuth}
             disabled={isLoading}
@@ -233,8 +194,6 @@ const AuthScreen = ({ onAuthSuccess, language }) => {
               setEmail('');
               setPassword('');
               setName('');
-              setDateOfBirth(new Date());
-              setShowDatePicker(false);
             }}
           >
             <Text style={styles.switchText}>
@@ -307,21 +266,6 @@ const styles = StyleSheet.create({
   switchText: {
     color: '#007AFF',
     fontSize: 14,
-  },
-  dateInput: {
-    width: '100%',
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-  },
-  dateInputText: {
-    fontSize: 16,
-    color: '#000000',
   },
 });
 
