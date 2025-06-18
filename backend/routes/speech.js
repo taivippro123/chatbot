@@ -102,30 +102,35 @@ async function convertAudioToLinear16(inputBuffer) {
 }
 
 // Speech to text endpoint
-app.post('/', authenticateToken, upload.single('audio'), async (req, res) => {
+app.post('/', authenticateToken, async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No audio file provided' });
+    const { audio, language } = req.body;
+    
+    if (!audio) {
+      return res.status(400).json({ message: 'No audio data provided' });
     }
 
-    console.log('Received audio file:', {
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      language: req.body.language
+    console.log('Received audio data:', {
+      audioLength: audio.length,
+      language: language || 'vi-VN'
     });
 
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(audio, 'base64');
+    console.log('Audio buffer size:', audioBuffer.length, 'bytes');
+
     // Convert audio to correct format
-    const audioBuffer = await convertAudioToLinear16(req.file.buffer);
+    const convertedAudioBuffer = await convertAudioToLinear16(audioBuffer);
 
     // Configure request for Google Cloud Speech-to-Text
     const request = {
       audio: {
-        content: audioBuffer.toString('base64'),
+        content: convertedAudioBuffer.toString('base64'),
       },
       config: {
         encoding: 'LINEAR16',
         sampleRateHertz: 16000,
-        languageCode: req.body.language || 'vi-VN',
+        languageCode: language || 'vi-VN',
         alternativeLanguageCodes: ['en-US', 'vi-VN'],
         model: 'latest_long', // Use latest and most accurate model
         enableAutomaticPunctuation: true,
@@ -135,11 +140,14 @@ app.post('/', authenticateToken, upload.single('audio'), async (req, res) => {
         profanityFilter: false,
         speechContexts: [{
           phrases: [
+            // Vietnamese news commands
+            'tin số', 'bài số', 'dừng', 'tạm dừng', 'tiếp tục', 'phát', 
+            'tin tiếp theo', 'bài tiếp theo', 'tin trước', 'bài trước',
+            'lặp lại', 'đọc lại', 'số một', 'số hai', 'số ba', 'số bốn', 'số năm',
+            // Numbers
+            'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười',
             // Common Vietnamese phrases
             'xin chào', 'cảm ơn', 'tạm biệt', 'làm ơn',
-            // Common English phrases
-            'hello', 'thank you', 'goodbye', 'please',
-            // Add more common phrases in both languages as needed
           ],
           boost: 20 // Boost the recognition of these phrases
         }]
