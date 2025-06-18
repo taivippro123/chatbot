@@ -36,6 +36,8 @@ A full-stack AI chatbot application with support for voice messaging, image inpu
 - Send messages using **voice input**
 - **Listen** to AI responses via text-to-speech
 - **JWT Authentication** for secure access
+- Toggle between **Light** and **Dark** themes
+- Support for **English** and **Vietnamese** languages
 
 ---
 
