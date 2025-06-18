@@ -19,7 +19,12 @@ export const translations = {
     failedToLoadMessages: 'Không thể tải tin nhắn',
     speechToTextFailed: 'Không thể chuyển đổi giọng nói thành văn bản',
     appearance: 'Giao diện',
-    darkMode: 'Chế độ tối'
+    darkMode: 'Chế độ tối',
+    handsFreeMode: 'Chế độ rảnh tay',
+    newsReader: 'Đọc tin tức',
+    tapToRecord: 'Nhấn để ghi âm',
+    recording: 'Đang ghi âm...',
+    newsReaderDescription: 'Chế độ an toàn cho lái xe - nghe tin tức và điều khiển bằng giọng nói'
     // ... existing translations ...
   },
   en: {
@@ -42,7 +47,13 @@ export const translations = {
     failedToLoadMessages: 'Failed to load messages',
     speechToTextFailed: 'Failed to convert speech to text',
     appearance: 'Appearance',
-    darkMode: 'Dark mode'
+    darkMode: 'Dark mode',
+    handsFreeMode: 'Hands-free Mode',
+    drivingMode: 'Driving Mode',
+    newsReader: 'News Reader',
+    tapToRecord: 'Tap to Record',
+    recording: 'Recording...',
+    newsReaderDescription: 'Safe mode for driving - listen to news and voice control'
     // ... existing translations ...
   }
 }; 

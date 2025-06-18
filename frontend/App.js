@@ -11,12 +11,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AuthScreen, { authAPI } from './src/components/AuthScreen';
 import SettingsScreen, { settingsAPI } from './src/components/SettingsScreen';
 import ChatScreen, { chatAPI } from './src/components/ChatScreen';
+import NewsReaderScreen from './src/components/NewsReaderScreen';
 import { translations } from './src/translations';
 
 export default function App() {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
-  const [settings, setSettings] = useState({ theme: 'light', language: 'vi' });
+  const [settings, setSettings] = useState({ theme: 'light', language: 'vi', handsFreeMode: false });
   const [language, setLanguage] = useState('vi');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -31,7 +32,8 @@ export default function App() {
         
         settingsAPI.loadSettings(
           (theme) => setSettings(prev => ({ ...prev, theme })),
-          setLanguage
+          setLanguage,
+          (handsFreeMode) => setSettings(prev => ({ ...prev, handsFreeMode }))
         );
       } catch (error) {
         console.error('Error initializing app:', error);
@@ -59,6 +61,10 @@ export default function App() {
 
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage);
+  };
+
+  const handleHandsFreeModeChange = (newHandsFreeMode) => {
+    setSettings(prev => ({ ...prev, handsFreeMode: newHandsFreeMode }));
   };
 
   if (!token || !user) {
@@ -90,13 +96,23 @@ export default function App() {
             style={{ flex: 1 }}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
           >
-            <ChatScreen
-              theme={settings.theme}
-              token={token}
-              t={t}
-              onLogout={handleLogout}
-              onSettingsPress={() => setIsSettingsOpen(true)}
-            />
+            {settings.handsFreeMode ? (
+              <NewsReaderScreen
+                theme={settings.theme}
+                token={token}
+                t={t}
+                onLogout={handleLogout}
+                onSettingsPress={() => setIsSettingsOpen(true)}
+              />
+            ) : (
+              <ChatScreen
+                theme={settings.theme}
+                token={token}
+                t={t}
+                onLogout={handleLogout}
+                onSettingsPress={() => setIsSettingsOpen(true)}
+              />
+            )}
           </KeyboardAvoidingView>
         </SafeAreaView>
 
@@ -104,10 +120,11 @@ export default function App() {
           visible={isSettingsOpen}
           theme={settings.theme}
           language={language}
+          handsFreeMode={settings.handsFreeMode}
           onThemeChange={handleThemeChange}
           onLanguageChange={handleLanguageChange}
+          onHandsFreeModeChange={handleHandsFreeModeChange}
           onClose={() => setIsSettingsOpen(false)}
-          t={t}
         />
       </View>
     </SafeAreaProvider>

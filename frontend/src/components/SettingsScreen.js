@@ -22,22 +22,25 @@ const SWIPE_THRESHOLD = 50;
 
 // Settings API functions
 export const settingsAPI = {
-  loadSettings: async (onThemeChange, onLanguageChange) => {
+  loadSettings: async (onThemeChange, onLanguageChange, onHandsFreeModeChange) => {
     try {
       const savedSettings = await AsyncStorage.getItem('settings');
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings);
         onThemeChange(parsed.theme || 'light');
         onLanguageChange(parsed.language || 'vi');
+        if (onHandsFreeModeChange) {
+          onHandsFreeModeChange(parsed.handsFreeMode || false);
+        }
       }
     } catch (error) {
       console.error('Error loading settings:', error);
     }
   },
 
-  saveSettings: async (theme, language) => {
+  saveSettings: async (theme, language, handsFreeMode = false) => {
     try {
-      const settings = { theme, language };
+      const settings = { theme, language, handsFreeMode };
       await AsyncStorage.setItem('settings', JSON.stringify(settings));
       return true;
     } catch (error) {
@@ -51,8 +54,10 @@ const SettingsScreen = ({
   visible,
   theme,
   language,
+  handsFreeMode,
   onThemeChange,
   onLanguageChange,
+  onHandsFreeModeChange,
   onClose,
 }) => {
   const t = translations[language];
@@ -120,7 +125,7 @@ const SettingsScreen = ({
 
   const handleThemeChange = async (newTheme) => {
     try {
-      if (await settingsAPI.saveSettings(newTheme, language)) {
+      if (await settingsAPI.saveSettings(newTheme, language, handsFreeMode)) {
         onThemeChange(newTheme);
       }
     } catch (error) {
@@ -130,11 +135,21 @@ const SettingsScreen = ({
 
   const handleLanguageChange = async (newLanguage) => {
     try {
-      if (await settingsAPI.saveSettings(theme, newLanguage)) {
+      if (await settingsAPI.saveSettings(theme, newLanguage, handsFreeMode)) {
         onLanguageChange(newLanguage);
       }
     } catch (error) {
       console.error('Error saving language:', error);
+    }
+  };
+
+  const handleHandsFreeModeChange = async (newHandsFreeMode) => {
+    try {
+      if (await settingsAPI.saveSettings(theme, language, newHandsFreeMode)) {
+        onHandsFreeModeChange(newHandsFreeMode);
+      }
+    } catch (error) {
+      console.error('Error saving hands-free mode:', error);
     }
   };
 
@@ -214,6 +229,31 @@ const SettingsScreen = ({
                         onValueChange={(value) => handleThemeChange(value ? 'dark' : 'light')}
                         trackColor={{ false: '#767577', true: '#81b0ff' }}
                         thumbColor={isDark ? '#fff' : '#f4f3f4'}
+                      />
+                    </View>
+                    <View style={[
+                      styles.option,
+                      { backgroundColor: isDark ? '#2D2D2D' : '#f5f5f5', marginTop: 8 }
+                    ]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[
+                          styles.optionText,
+                          { color: isDark ? '#fff' : '#000' }
+                        ]}>
+                          {t.handsFreeMode}
+                        </Text>
+                        <Text style={[
+                          styles.optionSubText,
+                          { color: isDark ? '#888' : '#666' }
+                        ]}>
+                          {t.newsReaderDescription}
+                        </Text>
+                      </View>
+                      <Switch
+                        value={handsFreeMode}
+                        onValueChange={handleHandsFreeModeChange}
+                        trackColor={{ false: '#767577', true: '#81b0ff' }}
+                        thumbColor={handsFreeMode ? '#fff' : '#f4f3f4'}
                       />
                     </View>
                   </View>
@@ -342,6 +382,10 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
+  },
+  optionSubText: {
+    fontSize: 12,
+    marginTop: 2,
   },
   languageOption: {
     flexDirection: 'row',
