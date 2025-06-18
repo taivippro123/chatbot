@@ -48,10 +48,27 @@ class TTSQueue {
       resolve();
       this.isPlaying = false;
       
-      // Process next item in queue
+      // Process next item in queue after a short delay
       setTimeout(() => this.processQueue(), 500);
     } catch (error) {
-      reject(error);
+      console.warn('TTS failed for text:', text.substring(0, 50));
+      // Try fallback with expo-speech if available
+      try {
+        if (Speech && Speech.speak) {
+          console.log('Falling back to expo-speech');
+          await Speech.speak(text, {
+            language: options.language || 'vi',
+            rate: options.speed || 1.0,
+          });
+          resolve();
+        } else {
+          throw new Error('No fallback TTS available');
+        }
+      } catch (fallbackError) {
+        console.error('Fallback TTS also failed:', fallbackError);
+        resolve(); // Continue with queue even if TTS fails
+      }
+      
       this.isPlaying = false;
       setTimeout(() => this.processQueue(), 500);
     }
@@ -82,12 +99,17 @@ class TTSQueue {
         throw new Error(`TTS API failed: ${response.status}`);
       }
 
-      // Get response as blob instead of array buffer for better performance
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
+      // Get response as array buffer and convert to base64 for React Native
+      const arrayBuffer = await response.arrayBuffer();
+      const base64Audio = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
       
+      const audioUri = `data:audio/mpeg;base64,${base64Audio}`;
+      
+      // Create and play audio using Expo Audio
       const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
+        { uri: audioUri },
         { shouldPlay: true, volume: 1.0 }
       );
 
@@ -97,14 +119,12 @@ class TTSQueue {
       return new Promise((resolve, reject) => {
         sound.setOnPlaybackStatusUpdate((status) => {
           if (status.didJustFinish) {
-            sound.unloadAsync();
-            URL.revokeObjectURL(audioUrl); // Clean up blob URL
+            sound.unloadAsync().catch(() => {}); // Ignore unload errors
             this.currentAudio = null;
             resolve();
           }
           if (status.error) {
-            sound.unloadAsync();
-            URL.revokeObjectURL(audioUrl); // Clean up blob URL
+            sound.unloadAsync().catch(() => {}); // Ignore unload errors
             this.currentAudio = null;
             reject(new Error('Audio playback error'));
           }
@@ -113,7 +133,8 @@ class TTSQueue {
 
     } catch (error) {
       console.error('Custom TTS Error:', error);
-      Alert.alert('TTS Error', error.message);
+      // Don't show alert for every TTS error, just log it
+      console.warn('TTS Error details:', error.message);
       throw error;
     }
   }
@@ -138,11 +159,16 @@ class TTSQueue {
     this.queue = [];
     this.isPlaying = false;
     if (this.currentAudio) {
-      this.currentAudio.stopAsync();
-      this.currentAudio.unloadAsync();
+      this.currentAudio.stopAsync().catch(() => {});
+      this.currentAudio.unloadAsync().catch(() => {});
       this.currentAudio = null;
     }
     this.isPaused = false;
+    
+    // Also stop expo-speech if available
+    if (Speech && Speech.stop) {
+      Speech.stop();
+    }
   }
 
   clear() {
@@ -161,11 +187,65 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
   const [audioLevel, setAudioLevel] = useState(0);
   const [isTTSPlaying, setIsTTSPlaying] = useState(false);
   const [isTTSPaused, setIsTTSPaused] = useState(false);
+  const [audioInitialized, setAudioInitialized] = useState(false);
   const sound = useRef(new Audio.Sound());
   const recording = useRef(null);
   const continuousRecording = useRef(null);
   const ttsQueue = useRef(new TTSQueue());
   const isDark = theme === 'dark';
+
+  // Initialize audio system
+  const initializeAudio = async () => {
+    try {
+      console.log('Initializing audio system...');
+      
+      // Set audio mode for optimal performance
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_MIX_WITH_OTHERS,
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DUCK_OTHERS,
+        playThroughEarpieceAndroid: false,
+      });
+      
+      setAudioInitialized(true);
+      console.log('Audio system initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize audio:', error);
+      // Continue without audio initialization
+      setAudioInitialized(true);
+    }
+  };
+
+  // Setup TTS callbacks
+  useEffect(() => {
+    initializeAudio();
+    
+    ttsQueue.current.onPause = () => setIsTTSPaused(true);
+    ttsQueue.current.onResume = () => setIsTTSPaused(false);
+    
+    return () => {
+      // Cleanup on unmount
+      ttsQueue.current.stop();
+      if (continuousRecording.current) {
+        continuousRecording.current.stopAndUnloadAsync().catch(() => {});
+      }
+      if (recording.current) {
+        recording.current.stopAndUnloadAsync().catch(() => {});
+      }
+      if (sound.current) {
+        sound.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (audioInitialized) {
+      fetchNews();
+    }
+  }, [audioInitialized]);
 
   // Lấy ngày tháng hiện tại
   const getCurrentDate = () => {
@@ -178,12 +258,6 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
       ? `ngày ${day} tháng ${month} năm ${year}`
       : `${month}/${day}/${year}`;
   };
-
-  // Setup TTS callbacks
-  useEffect(() => {
-    ttsQueue.current.onPause = () => setIsTTSPaused(true);
-    ttsQueue.current.onResume = () => setIsTTSPaused(false);
-  }, []);
 
   // Lấy danh sách bài viết từ backend
   const fetchNews = async () => {
@@ -766,24 +840,6 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
     }
   };
 
-  // Cleanup on component unmount
-  useEffect(() => {
-    return () => {
-      stopContinuousListening();
-      ttsQueue.current.stop();
-      if (recording.current) {
-        recording.current.stopAndUnloadAsync();
-      }
-      if (sound.current) {
-        sound.current.unloadAsync();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    fetchNews();
-  }, []);
-
   return (
     <View style={[
       styles.container,
@@ -816,7 +872,17 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
                 styles.loadingText,
                 { color: isDark ? '#ccc' : '#666' }
               ]}>
-                {t.language === 'vi' ? 'Đang tải tin tức...' : 'Loading news...'}
+                Đang tải tin tức...
+              </Text>
+            </View>
+          ) : !audioInitialized ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={isDark ? '#fff' : '#007AFF'} />
+              <Text style={[
+                styles.loadingText,
+                { color: isDark ? '#ccc' : '#666' }
+              ]}>
+                Đang khởi tạo hệ thống âm thanh...
               </Text>
             </View>
           ) : (
@@ -830,7 +896,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
                     styles.selectedLabel,
                     { color: isDark ? '#4CAF50' : '#1976D2' }
                   ]}>
-                    {t.language === 'vi' ? 'Đang phát:' : 'Now playing:'}
+                    Đang phát:
                   </Text>
                   <Text style={[
                     styles.selectedTitle,
@@ -849,7 +915,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
                         color="#fff"
                       />
                       <Text style={styles.controlButtonText}>
-                        {isPlaying ? (t.language === 'vi' ? 'Dừng' : 'Pause') : (t.language === 'vi' ? 'Phát' : 'Play')}
+                        {isPlaying ? 'Dừng' : 'Phát'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -884,6 +950,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
                       }
                     ]}
                     onPress={() => selectArticle(index)}
+                    disabled={isTTSPlaying && !isTTSPaused}
                   >
                     <View style={styles.articleRow}>
                       <View style={[

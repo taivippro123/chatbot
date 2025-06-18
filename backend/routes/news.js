@@ -81,11 +81,77 @@ async function getArticleAudio(url) {
                   $('h1.article-title').text().trim() ||
                   $('.detail-title').text().trim();
 
-    // Try multiple selectors for audio
-    let audioUrl = $('.audioplayer').attr('data-file') || 
-                   $('.audio-player').attr('data-file') ||
-                   $('audio source').attr('src') ||
-                   $('audio').attr('src');
+    // Try multiple selectors for audio with more specific targeting
+    let audioUrl = null;
+    
+    // Check for video.js audio elements (common pattern)
+    const vjsAudio = $('audio.vjs-tech').attr('src');
+    if (vjsAudio) {
+      audioUrl = vjsAudio;
+      console.log('Found vjs-tech audio:', audioUrl);
+    }
+    
+    // Check for direct audio elements
+    if (!audioUrl) {
+      const directAudio = $('audio[src]').attr('src');
+      if (directAudio) {
+        audioUrl = directAudio;
+        console.log('Found direct audio:', audioUrl);
+      }
+    }
+    
+    // Check for source elements inside audio tags
+    if (!audioUrl) {
+      const sourceAudio = $('audio source[src]').attr('src');
+      if (sourceAudio) {
+        audioUrl = sourceAudio;
+        console.log('Found source audio:', audioUrl);
+      }
+    }
+    
+    // Check for audioplayer data attributes
+    if (!audioUrl) {
+      const dataFileAudio = $('.audioplayer').attr('data-file') || 
+                           $('.audio-player').attr('data-file');
+      if (dataFileAudio) {
+        audioUrl = dataFileAudio;
+        console.log('Found data-file audio:', audioUrl);
+      }
+    }
+    
+    // Look for any audio-related elements with src containing .m4a, .mp3, etc
+    if (!audioUrl) {
+      $('audio, source').each((i, el) => {
+        const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-file');
+        if (src && (src.includes('.m4a') || src.includes('.mp3') || src.includes('.wav') || src.includes('tts.mediacdn.vn'))) {
+          audioUrl = src;
+          console.log('Found audio by extension/domain:', audioUrl);
+          return false; // break the loop
+        }
+      });
+    }
+    
+    // Search for URLs in the HTML content that might be audio files
+    if (!audioUrl) {
+      const htmlContent = response.data;
+      const audioUrlRegex = /(https?:\/\/[^\s"'<>]+\.(?:m4a|mp3|wav|aac)(?:\?[^\s"'<>]*)?)/gi;
+      const matches = htmlContent.match(audioUrlRegex);
+      if (matches && matches.length > 0) {
+        audioUrl = matches[0];
+        console.log('Found audio by regex:', audioUrl);
+      }
+    }
+    
+    // Search specifically for tts.mediacdn.vn URLs
+    if (!audioUrl) {
+      const htmlContent = response.data;
+      const ttsUrlRegex = /(https?:\/\/tts\.mediacdn\.vn[^\s"'<>]+)/gi;
+      const matches = htmlContent.match(ttsUrlRegex);
+      if (matches && matches.length > 0) {
+        audioUrl = matches[0];
+        console.log('Found TTS mediacdn URL:', audioUrl);
+      }
+    }
 
     // Handle relative audio URLs
     if (audioUrl && !audioUrl.startsWith('http')) {
@@ -96,11 +162,34 @@ async function getArticleAudio(url) {
       }
     }
 
-    console.log('Article details:', {
+    // Clean up URL (remove trailing ? if present)
+    if (audioUrl && audioUrl.endsWith('?')) {
+      audioUrl = audioUrl.slice(0, -1);
+    }
+
+    console.log('Final article details:', {
       title: title ? title.substring(0, 100) : 'No title found',
       hasAudio: !!audioUrl,
-      audioUrl: audioUrl || 'No audio found'
+      audioUrl: audioUrl || 'No audio found',
+      urlLength: audioUrl ? audioUrl.length : 0
     });
+
+    // Debug: Log all audio elements found
+    const allAudioElements = [];
+    $('audio').each((i, el) => {
+      const audioEl = {
+        id: $(el).attr('id'),
+        class: $(el).attr('class'),
+        src: $(el).attr('src'),
+        dataSrc: $(el).attr('data-src'),
+        dataFile: $(el).attr('data-file')
+      };
+      allAudioElements.push(audioEl);
+    });
+    
+    if (allAudioElements.length > 0) {
+      console.log('All audio elements found:', JSON.stringify(allAudioElements, null, 2));
+    }
 
     return {
       title: title || 'Không có tiêu đề',
