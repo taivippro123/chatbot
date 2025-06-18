@@ -1,56 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
-const textToSpeech = require('@google-cloud/text-to-speech');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const axios = require('axios');
 
-// Initialize Google Cloud Text-to-Speech client
-let client;
-try {
-  // Check if we have API key or Service Account credentials
-  const googleTTSAPI = process.env.GOOGLE_TTS_API;
-  if (!googleTTSAPI) {
-    throw new Error('GOOGLE_TTS_API environment variable is required');
-  }
-
-  // If it looks like an API key (starts with AIza)
-  if (googleTTSAPI.startsWith('AIza')) {
-    console.log('Using Google TTS API Key authentication');
-    client = new textToSpeech.TextToSpeechClient({
-      apiKey: googleTTSAPI,
-    });
-  } else {
-    // Try to decode as base64 Service Account credentials
-    console.log('Using Google TTS Service Account authentication');
-    const credentials = JSON.parse(Buffer.from(googleTTSAPI, 'base64').toString());
-    
-    client = new textToSpeech.TextToSpeechClient({
-      credentials: credentials,
-      projectId: credentials.project_id
-    });
-  }
-
-  console.log('Successfully initialized Google Cloud Text-to-Speech client');
-} catch (error) {
-  console.error('Error initializing Google Cloud Text-to-Speech client:', error);
-  
-  // Provide helpful error message
-  if (error.message.includes('not valid JSON')) {
-    console.error('Hint: If using API Key, make sure it starts with "AIza". If using Service Account, make sure the JSON is properly base64 encoded.');
-  }
-  
-  throw error;
-}
-
-// Text-to-Speech endpoint
+// Text-to-Speech endpoint using Google TTS REST API
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const { text, language = 'vi-VN', voice = null, speed = 1.0 } = req.body;
 
     if (!text) {
       return res.status(400).json({ message: 'Text is required' });
+    }
+
+    const googleTTSAPI = process.env.GOOGLE_TTS_API;
+    if (!googleTTSAPI) {
+      return res.status(500).json({ message: 'Google TTS API key not configured' });
     }
 
     console.log('TTS Request:', { text: text.substring(0, 100), language, voice, speed });
@@ -69,8 +33,8 @@ router.post('/', authenticateToken, async (req, res) => {
       voiceGender = 'FEMALE';
     }
 
-    // Construct the request
-    const request = {
+    // Construct the request for Google TTS REST API
+    const requestData = {
       input: { text: text },
       voice: {
         languageCode: language,
@@ -86,33 +50,62 @@ router.post('/', authenticateToken, async (req, res) => {
       },
     };
 
-    console.log('Sending request to Google Text-to-Speech...');
+    console.log('Sending request to Google Text-to-Speech REST API...');
     
-    // Perform the text-to-speech request
-    const [response] = await client.synthesizeSpeech(request);
-    
-    if (!response.audioContent) {
+    // Make request to Google TTS REST API
+    const response = await axios.post(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleTTSAPI}`,
+      requestData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000, // 30 seconds timeout
+      }
+    );
+
+    if (!response.data || !response.data.audioContent) {
       throw new Error('No audio content returned from Google TTS');
     }
 
-    console.log('Successfully generated audio, size:', response.audioContent.length, 'bytes');
+    // Decode base64 audio content
+    const audioBuffer = Buffer.from(response.data.audioContent, 'base64');
+    
+    console.log('Successfully generated audio, size:', audioBuffer.length, 'bytes');
 
     // Set headers for audio response
     res.set({
       'Content-Type': 'audio/mpeg',
-      'Content-Length': response.audioContent.length,
+      'Content-Length': audioBuffer.length,
       'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
     });
 
-    // Send the audio content directly
-    res.send(response.audioContent);
+    // Send the audio content
+    res.send(audioBuffer);
 
   } catch (error) {
     console.error('Text-to-speech error:', error);
-    res.status(500).json({ 
-      message: 'Error processing text to speech',
+    
+    let errorMessage = 'Error processing text to speech';
+    let statusCode = 500;
+    
+    if (error.response) {
+      // Google API error
+      statusCode = error.response.status;
+      errorMessage = error.response.data?.error?.message || error.message;
+      
+      if (statusCode === 400) {
+        errorMessage = 'Invalid request parameters';
+      } else if (statusCode === 403) {
+        errorMessage = 'API key invalid or quota exceeded';
+      } else if (statusCode === 429) {
+        errorMessage = 'Too many requests, please try again later';
+      }
+    }
+    
+    res.status(statusCode).json({ 
+      message: errorMessage,
       error: error.message,
-      details: error.details || null
     });
   }
 });
@@ -121,17 +114,37 @@ router.post('/', authenticateToken, async (req, res) => {
 router.get('/voices', authenticateToken, async (req, res) => {
   try {
     const { languageCode = 'vi-VN' } = req.query;
+    
+    const googleTTSAPI = process.env.GOOGLE_TTS_API;
+    if (!googleTTSAPI) {
+      return res.status(500).json({ message: 'Google TTS API key not configured' });
+    }
 
-    const [result] = await client.listVoices({
-      languageCode: languageCode,
-    });
+    console.log('Getting available voices for language:', languageCode);
 
-    const voices = result.voices.map(voice => ({
+    // Make request to Google TTS REST API for voices
+    const response = await axios.get(
+      `https://texttospeech.googleapis.com/v1/voices?key=${googleTTSAPI}&languageCode=${languageCode}`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000, // 10 seconds timeout
+      }
+    );
+
+    if (!response.data || !response.data.voices) {
+      throw new Error('No voices data returned from Google TTS');
+    }
+
+    const voices = response.data.voices.map(voice => ({
       name: voice.name,
       gender: voice.ssmlGender,
       languageCodes: voice.languageCodes,
       naturalSampleRateHertz: voice.naturalSampleRateHertz,
     }));
+
+    console.log(`Found ${voices.length} voices for ${languageCode}`);
 
     res.json({
       success: true,
@@ -141,11 +154,30 @@ router.get('/voices', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('Error getting voices:', error);
-    res.status(500).json({ 
-      message: 'Error getting available voices',
+    
+    let errorMessage = 'Error getting available voices';
+    let statusCode = 500;
+    
+    if (error.response) {
+      statusCode = error.response.status;
+      errorMessage = error.response.data?.error?.message || error.message;
+    }
+    
+    res.status(statusCode).json({ 
+      message: errorMessage,
       error: error.message
     });
   }
+});
+
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    service: 'Text-to-Speech',
+    timestamp: new Date().toISOString(),
+    apiConfigured: !!process.env.GOOGLE_TTS_API
+  });
 });
 
 module.exports = router; 
