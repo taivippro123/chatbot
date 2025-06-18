@@ -16,7 +16,7 @@ A full-stack AI chatbot application with support for voice messaging, image inpu
 
 - **Frontend:** Expo
 - **Backend:** Render
-- - **Database:** Clever Cloud
+- **Database:** Clever Cloud
 - **Image Hosting:** Cloudinary
 
 ---
