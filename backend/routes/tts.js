@@ -9,24 +9,38 @@ const os = require('os');
 // Initialize Google Cloud Text-to-Speech client
 let client;
 try {
-  // Get base64 encoded credentials from environment variable
-  const base64Credentials = process.env.GOOGLE_TTS_API;
-  if (!base64Credentials) {
+  // Check if we have API key or Service Account credentials
+  const googleTTSAPI = process.env.GOOGLE_TTS_API;
+  if (!googleTTSAPI) {
     throw new Error('GOOGLE_TTS_API environment variable is required');
   }
 
-  // Decode base64 credentials
-  const credentials = JSON.parse(Buffer.from(base64Credentials, 'base64').toString());
-  
-  // Create client with decoded credentials
-  client = new textToSpeech.TextToSpeechClient({
-    credentials: credentials,
-    projectId: credentials.project_id
-  });
+  // If it looks like an API key (starts with AIza)
+  if (googleTTSAPI.startsWith('AIza')) {
+    console.log('Using Google TTS API Key authentication');
+    client = new textToSpeech.TextToSpeechClient({
+      apiKey: googleTTSAPI,
+    });
+  } else {
+    // Try to decode as base64 Service Account credentials
+    console.log('Using Google TTS Service Account authentication');
+    const credentials = JSON.parse(Buffer.from(googleTTSAPI, 'base64').toString());
+    
+    client = new textToSpeech.TextToSpeechClient({
+      credentials: credentials,
+      projectId: credentials.project_id
+    });
+  }
 
   console.log('Successfully initialized Google Cloud Text-to-Speech client');
 } catch (error) {
   console.error('Error initializing Google Cloud Text-to-Speech client:', error);
+  
+  // Provide helpful error message
+  if (error.message.includes('not valid JSON')) {
+    console.error('Hint: If using API Key, make sure it starts with "AIza". If using Service Account, make sure the JSON is properly base64 encoded.');
+  }
+  
   throw error;
 }
 
