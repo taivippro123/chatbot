@@ -55,6 +55,7 @@ app.use('/api/messages', require('./routes/messages'));
 app.use('/api/speech', require('./routes/speech'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/news', require('./routes/news'));
+app.use('/api/tts', require('./routes/tts'));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
