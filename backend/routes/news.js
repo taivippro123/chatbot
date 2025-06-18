@@ -81,75 +81,97 @@ async function getArticleAudio(url) {
                   $('h1.article-title').text().trim() ||
                   $('.detail-title').text().trim();
 
-    // Try multiple selectors for audio with more specific targeting
+    // Extract date from URL for filtering
+    const urlMatch = url.match(/(\d{4})(\d{2})(\d{2})/);
+    const articleDate = urlMatch ? `${urlMatch[1]}/${urlMatch[2]}/${urlMatch[3]}` : null;
+    console.log('Article date extracted:', articleDate);
+
+    // Try multiple selectors for audio with better prioritization
     let audioUrl = null;
     
-    // Check for video.js audio elements (common pattern)
-    const vjsAudio = $('audio.vjs-tech').attr('src');
-    if (vjsAudio) {
-      audioUrl = vjsAudio;
-      console.log('Found vjs-tech audio:', audioUrl);
+    // PRIORITY 1: Check for audioplayer data-file (most reliable for current articles)
+    const audioPlayerEl = $('.audioplayer[data-file]');
+    if (audioPlayerEl.length > 0) {
+      audioUrl = audioPlayerEl.attr('data-file');
+      console.log('Found audioplayer data-file:', audioUrl);
     }
     
-    // Check for direct audio elements
-    if (!audioUrl) {
-      const directAudio = $('audio[src]').attr('src');
-      if (directAudio) {
-        audioUrl = directAudio;
-        console.log('Found direct audio:', audioUrl);
-      }
-    }
-    
-    // Check for source elements inside audio tags
-    if (!audioUrl) {
-      const sourceAudio = $('audio source[src]').attr('src');
-      if (sourceAudio) {
-        audioUrl = sourceAudio;
-        console.log('Found source audio:', audioUrl);
-      }
-    }
-    
-    // Check for audioplayer data attributes
-    if (!audioUrl) {
-      const dataFileAudio = $('.audioplayer').attr('data-file') || 
-                           $('.audio-player').attr('data-file');
-      if (dataFileAudio) {
-        audioUrl = dataFileAudio;
-        console.log('Found data-file audio:', audioUrl);
-      }
-    }
-    
-    // Look for any audio-related elements with src containing .m4a, .mp3, etc
-    if (!audioUrl) {
-      $('audio, source').each((i, el) => {
-        const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-file');
-        if (src && (src.includes('.m4a') || src.includes('.mp3') || src.includes('.wav') || src.includes('tts.mediacdn.vn'))) {
+    // PRIORITY 2: Check for video.js audio elements with matching date
+    if (!audioUrl && articleDate) {
+      $('audio.vjs-tech').each((i, el) => {
+        const src = $(el).attr('src');
+        if (src && src.includes(articleDate.replace(/\//g, '/'))) {
           audioUrl = src;
-          console.log('Found audio by extension/domain:', audioUrl);
-          return false; // break the loop
+          console.log('Found vjs-tech audio with matching date:', audioUrl);
+          return false; // break loop
         }
       });
     }
     
-    // Search for URLs in the HTML content that might be audio files
-    if (!audioUrl) {
+    // PRIORITY 3: Check for any audio with current date
+    if (!audioUrl && articleDate) {
+      const currentYear = articleDate.split('/')[0];
+      const currentMonth = articleDate.split('/')[1];
+      const currentDay = articleDate.split('/')[2];
+      
+      $('audio[src], source[src]').each((i, el) => {
+        const src = $(el).attr('src');
+        if (src && src.includes(currentYear) && src.includes(currentMonth) && src.includes(currentDay)) {
+          audioUrl = src;
+          console.log('Found audio with matching date:', audioUrl);
+          return false; // break loop
+        }
+      });
+    }
+    
+    // PRIORITY 4: Search for current date URLs in HTML content with .m4a preference
+    if (!audioUrl && articleDate) {
       const htmlContent = response.data;
-      const audioUrlRegex = /(https?:\/\/[^\s"'<>]+\.(?:m4a|mp3|wav|aac)(?:\?[^\s"'<>]*)?)/gi;
-      const matches = htmlContent.match(audioUrlRegex);
-      if (matches && matches.length > 0) {
-        audioUrl = matches[0];
-        console.log('Found audio by regex:', audioUrl);
+      const currentYear = articleDate.split('/')[0];
+      const currentMonth = articleDate.split('/')[1];
+      const currentDay = articleDate.split('/')[2];
+      
+      // Look for .m4a files first (preferred format)
+      const m4aRegex = new RegExp(`(https?://[^\\s"'<>]*${currentYear}[^\\s"'<>]*${currentMonth}[^\\s"'<>]*${currentDay}[^\\s"'<>]*\\.m4a(?:\\?[^\\s"'<>]*)?)`, 'gi');
+      const m4aMatches = htmlContent.match(m4aRegex);
+      if (m4aMatches && m4aMatches.length > 0) {
+        audioUrl = m4aMatches[0];
+        console.log('Found current date .m4a by regex:', audioUrl);
       }
     }
     
-    // Search specifically for tts.mediacdn.vn URLs
-    if (!audioUrl) {
+    // PRIORITY 5: Fallback - any tts.mediacdn.vn with current date
+    if (!audioUrl && articleDate) {
       const htmlContent = response.data;
-      const ttsUrlRegex = /(https?:\/\/tts\.mediacdn\.vn[^\s"'<>]+)/gi;
-      const matches = htmlContent.match(ttsUrlRegex);
-      if (matches && matches.length > 0) {
-        audioUrl = matches[0];
-        console.log('Found TTS mediacdn URL:', audioUrl);
+      const currentYear = articleDate.split('/')[0];
+      const currentMonth = articleDate.split('/')[1];
+      const currentDay = articleDate.split('/')[2];
+      
+      const ttsRegex = new RegExp(`(https?://tts\\.mediacdn\\.vn[^\\s"'<>]*${currentYear}[^\\s"'<>]*${currentMonth}[^\\s"'<>]*${currentDay}[^\\s"'<>]*)`, 'gi');
+      const ttsMatches = htmlContent.match(ttsRegex);
+      if (ttsMatches && ttsMatches.length > 0) {
+        // Prefer .m4a over other formats
+        const m4aMatch = ttsMatches.find(match => match.includes('.m4a'));
+        audioUrl = m4aMatch || ttsMatches[0];
+        console.log('Found current date TTS URL:', audioUrl);
+      }
+    }
+    
+    // PRIORITY 6: Direct audio elements (fallback)
+    if (!audioUrl) {
+      const directAudio = $('audio[src]').attr('src');
+      if (directAudio) {
+        audioUrl = directAudio;
+        console.log('Found direct audio (fallback):', audioUrl);
+      }
+    }
+    
+    // PRIORITY 7: Source elements (fallback)
+    if (!audioUrl) {
+      const sourceAudio = $('audio source[src]').attr('src');
+      if (sourceAudio) {
+        audioUrl = sourceAudio;
+        console.log('Found source audio (fallback):', sourceAudio);
       }
     }
 
@@ -167,17 +189,26 @@ async function getArticleAudio(url) {
       audioUrl = audioUrl.slice(0, -1);
     }
 
+    // Validate audio URL (check if it's from current year at least)
+    const currentYear = new Date().getFullYear();
+    if (audioUrl && !audioUrl.includes(currentYear.toString()) && !audioUrl.includes((currentYear - 1).toString())) {
+      console.warn('Audio URL seems too old, might not be for current article:', audioUrl);
+      // Don't set to null, but log warning
+    }
+
     console.log('Final article details:', {
       title: title ? title.substring(0, 100) : 'No title found',
       hasAudio: !!audioUrl,
       audioUrl: audioUrl || 'No audio found',
-      urlLength: audioUrl ? audioUrl.length : 0
+      urlLength: audioUrl ? audioUrl.length : 0,
+      articleDate: articleDate
     });
 
     // Debug: Log all audio elements found
     const allAudioElements = [];
-    $('audio').each((i, el) => {
+    $('.audioplayer, audio').each((i, el) => {
       const audioEl = {
+        tagName: el.tagName,
         id: $(el).attr('id'),
         class: $(el).attr('class'),
         src: $(el).attr('src'),

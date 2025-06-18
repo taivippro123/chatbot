@@ -247,16 +247,40 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
     }
   }, [audioInitialized]);
 
-  // Lấy ngày tháng hiện tại
+  // Chuyển số thành từ tiếng Việt để TTS đọc tự nhiên hơn
+  const numberToVietnamese = (num) => {
+    const ones = ['', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+    const tens = ['', '', 'hai mười', 'ba mười', 'bốn mười', 'năm mười', 'sáu mười', 'bảy mười', 'tám mười', 'chín mười'];
+    const teens = ['mười', 'mười một', 'mười hai', 'mười ba', 'mười bốn', 'mười lăm', 'mười sáu', 'mười bảy', 'mười tám', 'mười chín'];
+    
+    if (num < 10) return ones[num];
+    if (num < 20) return teens[num - 10];
+    if (num < 100) {
+      const ten = Math.floor(num / 10);
+      const one = num % 10;
+      if (one === 0) return tens[ten];
+      if (ten === 2 && one === 5) return 'hai mười lăm';
+      return tens[ten] + (one === 5 && ten > 1 ? ' lăm' : (one === 1 && ten > 1 ? ' mốt' : ' ' + ones[one]));
+    }
+    return num.toString(); // fallback for larger numbers
+  };
+
+  const monthToVietnamese = (month) => {
+    const months = ['', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười', 'mười một', 'mười hai'];
+    return months[month] || month.toString();
+  };
+
+  // Lấy ngày tháng hiện tại với format tiếng Việt tự nhiên
   const getCurrentDate = () => {
     const now = new Date();
     const day = now.getDate();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
     
-    return t.language === 'vi' 
-      ? `ngày ${day} tháng ${month} năm ${year}`
-      : `${month}/${day}/${year}`;
+    const dayText = numberToVietnamese(day);
+    const monthText = monthToVietnamese(month);
+    
+    return `ngày ${dayText} tháng ${monthText} năm ${year}`;
   };
 
   // Lấy danh sách bài viết từ backend
