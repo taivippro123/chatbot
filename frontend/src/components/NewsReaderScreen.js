@@ -329,7 +329,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
       }
       
       // 3. Hỏi user chọn
-      const askText = 'Bạn muốn nghe tin nào? Có thể nói tin số 1, tin số 2, hoặc các lệnh điều khiển như dừng, tiếp tục.';
+      const askText = 'Bạn muốn đọc tin nào? Có thể nói tin số 1, tin số 2, hoặc các lệnh điều khiển như dừng, tiếp tục, tin tiếp theo.';
       await ttsQueue.current.speak(askText, { language: 'vi-VN', token });
       
       setIsTTSPlaying(false);
@@ -357,10 +357,10 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
       setIsTTSPlaying(true);
       
       try {
-        const selectedText = `Đã chọn tin số ${index + 1}: ${articles[index].title}`;
+        const selectedText = `Đã chọn tin số ${index + 1}`;
         await ttsQueue.current.speak(selectedText, { language: 'vi-VN', token });
         
-        // Auto-play audio sau khi thông báo
+        // Auto-read article sau khi thông báo
         await playNewsAudio(index);
         
       } catch (error) {
@@ -370,71 +370,94 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
     }
   };
 
-  // Lấy audio URL và phát
+  // Đọc nội dung bài báo bằng TTS (không cần audio URL)
   const playNewsAudio = async (articleIndex) => {
     try {
       const article = articles[articleIndex];
       setSelected(article);
       setSelectedArticleIndex(articleIndex);
       
-      console.log('Playing article:', article);
-      
-      const loadingText = `Đang tải audio tin số ${articleIndex + 1}`;
-      await ttsQueue.current.speak(loadingText, { language: 'vi-VN', token });
-      
-      const res = await axios.get(`${API_URL}/news/audio`, {
-        params: { url: article.url },
+      console.log('📰 Reading article with TTS:', {
+        title: article.title,
+        hasDescription: !!article.description,
+        hasContent: !!article.content,
+        descriptionLength: article.description ? article.description.length : 0,
+        contentLength: article.content ? article.content.length : 0
       });
-
-      console.log('Audio response:', res.data);
-
-      const audioUrl = res.data.audioUrl;
-      if (!audioUrl) {
-        const noAudioText = "Tin này không có file âm thanh, sẽ đọc nội dung bằng giọng nói";
-        await ttsQueue.current.speak(noAudioText, { language: 'vi-VN', token });
+      
+      const startText = `Bắt đầu đọc tin số ${articleIndex + 1}`;
+      await ttsQueue.current.speak(startText, { language: 'vi-VN', token });
+      
+      // Đọc tiêu đề
+      await ttsQueue.current.speak(article.title, { language: 'vi-VN', token });
+      
+      // Đọc nội dung nếu có (thử description trước, sau đó content)
+      const contentToRead = article.description || article.content || '';
+      if (contentToRead && contentToRead.trim() !== '') {
+        // Clean up HTML tags and special characters from content
+        let cleanContent = contentToRead
+          .replace(/<[^>]*>/g, '') // Remove HTML tags
+          .replace(/&quot;/g, '"') // Replace &quot; with "
+          .replace(/&amp;/g, '&') // Replace &amp; with &
+          .replace(/&lt;/g, '<') // Replace &lt; with <
+          .replace(/&gt;/g, '>') // Replace &gt; with >
+          .replace(/&[^;]+;/g, ' ') // Remove other HTML entities
+          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+          .replace(/\n+/g, ' ') // Replace newlines with space
+          .trim();
         
-        // Fallback: đọc title bằng TTS
-        await ttsQueue.current.speak(article.title, { language: 'vi-VN', token });
+        console.log('📝 Clean content to read:', cleanContent.substring(0, 200) + '...');
+        console.log('📊 Content length:', cleanContent.length, 'characters');
         
-        setIsTTSPlaying(false);
-        setTimeout(() => {
-          startContinuousListening();
-        }, 1000);
-        return;
+        if (cleanContent.length > 10) { // Only read if content is meaningful
+          // Split long content into smaller chunks for better TTS
+          if (cleanContent.length > 500) {
+            console.log('📚 Content is long, splitting into chunks...');
+            
+            // Split by sentences (. ! ? and Vietnamese punctuation)
+            const sentences = cleanContent
+              .split(/[.!?]+|(?<=\d+)\s+(?=[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÊỀẾỆỂỄÔỒỐỘỔỖƠỜỚỢỞỠƯỪỨỰỬỮĐ])/)
+              .filter(s => s.trim().length > 10);
+            
+            for (let i = 0; i < sentences.length && i < 5; i++) { // Limit to first 5 sentences
+              const sentence = sentences[i].trim();
+              if (sentence.length > 5) {
+                console.log(`🗣️ Reading sentence ${i + 1}:`, sentence.substring(0, 100) + '...');
+                await ttsQueue.current.speak(sentence, { language: 'vi-VN', token });
+              }
+            }
+            
+            if (sentences.length > 5) {
+              await ttsQueue.current.speak('Nội dung còn dài, bạn có thể vào link để đọc thêm.', { language: 'vi-VN', token });
+            }
+          } else {
+            console.log('🗣️ Reading full content:', cleanContent.substring(0, 100) + '...');
+            await ttsQueue.current.speak(cleanContent, { language: 'vi-VN', token });
+          }
+        } else {
+          console.log('⚠️ Content too short or empty, skipping content reading');
+        }
+      } else {
+        console.log('⚠️ No description available');
+        await ttsQueue.current.speak('Bài này không có nội dung tóm tắt.', { language: 'vi-VN', token });
       }
-
-      await sound.current.unloadAsync();
-      await sound.current.loadAsync({ uri: audioUrl });
-      await sound.current.playAsync();
-      setIsPlaying(true);
+      
       setIsTTSPlaying(false);
       
-      // Start continuous listening khi bắt đầu phát audio
+      const finishedText = 'Đã đọc xong tin này. Bạn có thể chọn tin khác hoặc nói "tin tiếp theo".';
+      await ttsQueue.current.speak(finishedText, { language: 'vi-VN', token });
+      
       setTimeout(() => {
         startContinuousListening();
-      }, 2000);
-      
-      // Listen for audio completion
-      sound.current.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          setIsPlaying(false);
-          stopContinuousListening();
-          
-          const finishedText = 'Đã phát xong tin này. Bạn có thể chọn tin khác.';
-          ttsQueue.current.speak(finishedText, { language: 'vi-VN', token }).then(() => {
-            setTimeout(() => {
-              startContinuousListening();
-            }, 1000);
-          });
-        }
-      });
+      }, 1000);
       
     } catch (err) {
-      console.error('Error playing audio', err);
-      const errorText = `Không thể phát audio tin này. Sẽ đọc bằng giọng nói.`;
+      console.error('Error reading article with TTS:', err);
+      
+      const errorText = `Có lỗi khi đọc tin này. Sẽ đọc tiêu đề.`;
       await ttsQueue.current.speak(errorText, { language: 'vi-VN', token });
       
-      // Fallback: đọc title bằng TTS khi có lỗi
+      // Fallback: chỉ đọc title khi có lỗi
       await ttsQueue.current.speak(articles[articleIndex].title, { language: 'vi-VN', token });
       
       setIsTTSPlaying(false);
@@ -457,21 +480,8 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
     }
   };
 
-  // Dừng và tiếp tục Audio
-  const pauseAudio = async () => {
-    await sound.current.pauseAsync();
-    setIsPlaying(false);
-  };
-  
-  const resumeAudio = async () => {
-    await sound.current.playAsync();
-    setIsPlaying(true);
-    if (!isContinuousListening) {
-      setTimeout(() => {
-        startContinuousListening();
-      }, 1000);
-    }
-  };
+  // TTS control functions đã được định nghĩa ở trên
+  // pauseTTS và resumeTTS đã có sẵn
 
   // Simple similarity calculation
   const calculateSimilarity = (str1, str2) => {
@@ -635,20 +645,21 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
   const executeControlCommand = async (action) => {
     switch (action) {
       case 'stop':
-        if (isPlaying) {
-          await pauseAudio();
-          await ttsQueue.current.speak('Đã tạm dừng', { language: 'vi-VN', token });
-        } else if (isTTSPlaying) {
+        if (isTTSPlaying) {
           await pauseTTS();
-          await ttsQueue.current.speak('Đã tạm dừng', { language: 'vi-VN', token });
+          await ttsQueue.current.speak('Đã tạm dừng đọc', { language: 'vi-VN', token });
+        } else {
+          ttsQueue.current.stop();
+          await ttsQueue.current.speak('Đã dừng', { language: 'vi-VN', token });
         }
         break;
       case 'continue':
-        if (!isPlaying && selected) {
-          await resumeAudio();
-          await ttsQueue.current.speak('Tiếp tục phát', { language: 'vi-VN', token });
-        } else if (isTTSPaused) {
+        if (isTTSPaused) {
           await resumeTTS();
+        } else if (selectedArticleIndex !== null) {
+          await playNewsAudio(selectedArticleIndex);
+        } else {
+          await ttsQueue.current.speak('Chưa có tin nào để tiếp tục', { language: 'vi-VN', token });
         }
         break;
       case 'next':
@@ -669,7 +680,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
         if (selectedArticleIndex !== null) {
           await selectArticle(selectedArticleIndex);
         } else {
-          await ttsQueue.current.speak('Chưa chọn tin nào để lặp lại', { language: 'vi-VN', token });
+          await ttsQueue.current.speak('Chưa chọn tin nào để đọc lại', { language: 'vi-VN', token });
         }
         break;
     }
@@ -920,7 +931,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
                     styles.selectedLabel,
                     { color: isDark ? '#4CAF50' : '#1976D2' }
                   ]}>
-                    Đang phát:
+                    Đang đọc:
                   </Text>
                   <Text style={[
                     styles.selectedTitle,
@@ -931,15 +942,15 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
                   <View style={styles.audioControls}>
                     <TouchableOpacity
                       style={[styles.controlButton, { backgroundColor: isDark ? '#4CAF50' : '#2196F3' }]}
-                      onPress={isPlaying ? pauseAudio : resumeAudio}
+                      onPress={isTTSPlaying ? (isTTSPaused ? resumeTTS : pauseTTS) : () => playNewsAudio(selectedArticleIndex)}
                     >
                       <Ionicons
-                        name={isPlaying ? "pause" : "play"}
+                        name={isTTSPlaying ? (isTTSPaused ? "play" : "pause") : "volume-high"}
                         size={20}
                         color="#fff"
                       />
                       <Text style={styles.controlButtonText}>
-                        {isPlaying ? 'Dừng' : 'Phát'}
+                        {isTTSPlaying ? (isTTSPaused ? 'Tiếp tục' : 'Tạm dừng') : 'Đọc lại'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -958,7 +969,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
                   styles.instructionText,
                   { color: isDark ? '#888' : '#666' }
                 ]}>
-                  Nhấn vào bài báo hoặc nói "Tin số X" để chọn
+                  Nhấn vào bài báo hoặc nói "Tin số X" để đọc
                 </Text>
                 {articles.map((article, index) => (
                   <TouchableOpacity
@@ -1130,7 +1141,7 @@ const NewsReaderScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
           styles.micButtonHint,
           { color: isDark ? '#888' : '#666' }
         ]}>
-          Nói: "Tin số X", "Dừng", "Tiếp tục", "Tin tiếp theo"
+          Nói: "Tin số X", "Dừng", "Tiếp tục", "Tin tiếp theo", "Đọc lại"
         </Text>
         
         {audioLevel > -40 && isContinuousListening && (
