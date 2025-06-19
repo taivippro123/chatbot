@@ -57,6 +57,7 @@ This app supports listening to the latest news articles from [Tuổi Trẻ](http
 git clone https://github.com/taivippro123/chatbot.git
 cd chatbot
 cd frontend
+npm install
 npx expo start
 Use an Android Emulator or scan the QR code with Expo Go App on your Android/iOS device.
 ```
