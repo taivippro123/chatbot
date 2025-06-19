@@ -15,7 +15,8 @@ const MessageList = ({
   messages, 
   theme, 
   language,
-  style
+  style,
+  hideAudioButton
 }) => {
   const isDark = theme === 'dark';
   const listRef = useRef(null);
@@ -80,8 +81,9 @@ const MessageList = ({
       onPlayAudio={handlePlayAudio}
       isUser={message.sender === 'user'}
       language={language}
+      hideAudioButton={hideAudioButton}
     />
-  ), [theme, isPlaying, currentPlayingId, language]);
+  ), [theme, isPlaying, currentPlayingId, language, hideAudioButton]);
 
   const handleScroll = useCallback(({ nativeEvent }) => {
     isScrolling.current = true;

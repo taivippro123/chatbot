@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 // import { API_URL } from '@env';
 import { API_URL } from '../config/api';
 console.log('API_URL:', API_URL);
@@ -170,21 +171,17 @@ const InputBar = ({
       recording.current = null;
       setIsRecording(false);
 
-      const formData = new FormData();
-      formData.append('audio', {
-        uri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
-      });
-      formData.append('language', language === 'vi' ? 'vi-VN' : 'en-US');
+      // Đọc file audio thành base64 string
+      const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
 
+      // Gửi audio lên API speech để lấy text (dạng JSON)
       const response = await fetch(`${API_URL}/speech`, {
         method: 'POST',
-        body: formData,
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ audio: base64Audio, language: language === 'vi' ? 'vi-VN' : 'en-US' }),
       });
 
       if (!response.ok) {

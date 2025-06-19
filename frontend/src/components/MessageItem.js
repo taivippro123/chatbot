@@ -58,7 +58,8 @@ const MessageItem = ({
   currentPlayingId, 
   onPlayAudio,
   isUser,
-  language
+  language,
+  hideAudioButton
 }) => {
   const isDark = theme === 'dark';
   const messageTime = message.created_at ? new Date(message.created_at) : null;
@@ -282,7 +283,7 @@ const MessageItem = ({
             {renderFormattedText(message.text)}
           </View>
         )}
-        {!isUser && message.text && (
+        {!isUser && message.text && !hideAudioButton && (
           <TouchableOpacity
             style={[
               styles.audioButton,

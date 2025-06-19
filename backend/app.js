@@ -6,6 +6,7 @@ const app = express();
 app.use(cors());
 
 // Parse JSON bodies
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ... rest of your server code 

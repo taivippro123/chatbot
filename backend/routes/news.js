@@ -1,8 +1,6 @@
-// routes/news.js
 const express = require('express');
 const Parser = require('rss-parser');
 const axios = require('axios');
-const cheerio = require('cheerio');
 const router = express.Router();
 
 const parser = new Parser({
@@ -11,104 +9,75 @@ const parser = new Parser({
   }
 });
 
-// Lấy danh sách tin mới từ RSS của Tuổi Trẻ
-async function getLatestArticles() {
-    try {
-        const rssUrl = 'https://tuoitre.vn/rss/tin-moi-nhat.rss';
-        console.log('📡 Fetching news from RSS:', rssUrl);
+const stripHtml = (html) =>
+  html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 
-        const feed = await parser.parseURL(rssUrl);
-        console.log('📰 RSS Feed Info:', {
-            title: feed.title,
-            description: feed.description,
-            totalItems: feed.items.length
-        });
+const RSS_URL = 'https://tuoitre.vn/rss/tin-moi-nhat.rss';
 
-        const articles = feed.items.slice(0, 5).map((item, index) => {
-            // Clean up title (remove CDATA if present)
-            let cleanTitle = item.title;
-            if (cleanTitle.includes('[CDATA[')) {
-                cleanTitle = cleanTitle.replace(/^.*\[CDATA\[/, '').replace(/\]\].*$/, '');
-            }
-            
-            // Clean up description
-            let cleanDescription = item.description || item.contentSnippet || '';
-            if (cleanDescription.includes('[CDATA[')) {
-                cleanDescription = cleanDescription.replace(/^.*\[CDATA\[/, '').replace(/\]\].*$/, '');
-            }
-
-            const article = {
-                title: cleanTitle.trim(),
-                url: item.link,
-                description: cleanDescription.trim(),
-                pubDate: item.pubDate,
-                content: item['content:encoded'] || cleanDescription
-            };
-
-            console.log(`📝 Article ${index + 1}:`, {
-                title: article.title.substring(0, 100),
-                url: article.url,
-                pubDate: article.pubDate
-            });
-
-            return article;
-        });
-
-        console.log(`✅ Successfully fetched ${articles.length} articles from RSS`);
-        return articles;
-
-    } catch (error) {
-        console.error('❌ Error fetching RSS feed:', error);
-        throw error;
-    }
-}
-
-// Lấy nội dung chi tiết của bài báo từ RSS (không cần audio URL)
-async function getArticleContent(url) {
+function extractAudioUrl(articleUrl, pubDate) {
   try {
-    console.log('📖 Getting full article content for:', url);
-    
-    // Tìm bài báo từ RSS data đã load
-    // Vì chúng ta đã có RSS data, chỉ cần trả về thông báo thành công
-    return {
-      title: 'Nội dung đã sẵn từ RSS',
-      url,
-      audioUrl: null // Không cần audio URL, dùng TTS
-    };
-    
-  } catch (error) {
-    console.error('❌ Error getting article content:', error);
-    return {
-      title: 'Lỗi tải nội dung bài báo',
-      url,
-      audioUrl: null
-    };
+    // Lấy articleId từ URL
+    const match = articleUrl.match(/-(\d+)\.htm/);
+    if (!match) return null;
+    const articleId = match[1];
+    // Lấy ngày tháng năm từ pubDate
+    const date = new Date(pubDate);
+    if (isNaN(date.getTime())) return null;
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `https://tts.mediacdn.vn/${yyyy}/${mm}/${dd}/tuoitre-nu-1-${articleId}.m4a`;
+  } catch {
+    return null;
   }
 }
 
-// Route: GET /api/news
-router.get('/', async (req, res) => {
+async function getLatestArticles() {
+  const feed = await parser.parseURL(RSS_URL);
+  return feed.items.slice(0, 20).map(item => {
+    let cleanTitle = item.title;
+    if (cleanTitle.includes('[CDATA[')) {
+      cleanTitle = cleanTitle.replace(/^.*\[CDATA\[/, '').replace(/\]\].*$/, '');
+    }
+    let cleanDescription = item.description || item.contentSnippet || '';
+    if (cleanDescription.includes('[CDATA[')) {
+      cleanDescription = cleanDescription.replace(/^.*\[CDATA\[/, '').replace(/\]\].*$/, '');
+    }
+    const pubDate = item.pubDate;
+    const url = item.link;
+    return {
+      title: cleanTitle.trim(),
+      url,
+      description: cleanDescription.trim(),
+      pubDate,
+      content: stripHtml(item['content:encoded'] || cleanDescription),
+      audioUrl: extractAudioUrl(url, pubDate)
+    };
+  });
+}
+
+router.post('/', async (req, res) => {
   try {
     const articles = await getLatestArticles();
-        console.log('Returning articles:', articles.length);
-    res.json(articles);
+    if (!articles || articles.length === 0) {
+      return res.status(404).json({ error: 'No news articles found' });
+    }
+    // Trả về 10 bài mới nhất
+    return res.json({
+      articles: articles.slice(0, 10)
+    });
   } catch (err) {
-        console.error('Failed to fetch news list:', err);
-        res.status(500).json({ error: 'Failed to fetch news list', details: err.message });
+    console.error('❌ Failed to fetch news:', err);
+    res.status(500).json({ error: 'Failed to get news', details: err.message });
   }
 });
 
-// Route: GET /api/news/content?url=... (không cần nữa vì RSS đã có content)
-router.get('/audio', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const { url } = req.query;
-    if (!url) return res.status(400).json({ error: 'Missing URL' });
-
-    const data = await getArticleContent(url);
-    res.json(data);
+    const articles = await getLatestArticles();
+    res.json(articles);
   } catch (err) {
-    console.error('Failed to fetch article content:', err);
-    res.status(500).json({ error: 'Failed to fetch article content', details: err.message });
+    res.status(500).json({ error: 'Failed to fetch news list', details: err.message });
   }
 });
 
