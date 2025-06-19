@@ -48,7 +48,7 @@ This app supports listening to the latest news articles from [Tuổi Trẻ](http
 - 🧠 It extracts the `articleId` from each article link and parses the `pubDate`
 - 📅 It converts the date to `YYYY/MM/DD` format
 - 🔊 Then constructs the TTS (text-to-speech) audio URL like this:
-  `https://tts.mediacdn.vn/YYYY/MM/DD/tuoitre-nu-1-ARTICLEID.m4a`
+- `https://tts.mediacdn.vn/YYYY/MM/DD/tuoitre-nu-1-ARTICLEID.m4a`
 
 ---
 ## 🚀 How to Use
