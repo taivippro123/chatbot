@@ -6,7 +6,7 @@ A full-stack AI chatbot application with support for voice messaging, image inpu
 
 ## 🧰 Tech Stack
 
-- **Frontend:** React Native (Expo)
+- **Frontend:** React Native
 - **Backend:** Node.js
 - **Database:** MySQL
 
@@ -40,7 +40,16 @@ A full-stack AI chatbot application with support for voice messaging, image inpu
 - Support for **English** and **Vietnamese** languages
 
 ---
+## 📰 Tuổi Trẻ News Listening Feature
 
+This app supports listening to the latest news articles from [Tuổi Trẻ](https://tuoitre.vn) by parsing their official RSS feed.
+
+- 🔗 **RSS Source:** https://tuoitre.vn/rss/tin-moi-nhat.rss
+- 🧠 It extracts the `articleId` from each article link and parses the `pubDate`
+- 📅 It converts the date to `YYYY/MM/DD` format
+- 🔊 Then constructs the TTS (text-to-speech) audio URL like this: `https://tts.mediacdn.vn/YYYY/MM/DD/tuoitre-nu-1-ARTICLEID.m4a`
+
+---
 ## 🚀 How to Use
 
 ```bash
