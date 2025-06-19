@@ -9,6 +9,7 @@ import {
   PanResponder 
 } from 'react-native';
 // import { API_URL } from '@env';
+import * as Speech from 'expo-speech';
 
 import Header from './Header';
 import MessageList from './MessageList';
@@ -87,7 +88,7 @@ export const chatAPI = {
   
 };
 
-const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
+const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress, handsFreeMode }) => {
   const [messages, setMessages] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
@@ -114,6 +115,16 @@ const ChatScreen = ({ theme, token, t, onLogout, onSettingsPress }) => {
       loadInitialData();
     }
   }, [token]);
+
+  // Tắt audio TTS khi chuyển sang handsFreeMode hoặc unmount
+  useEffect(() => {
+    if (handsFreeMode) {
+      Speech.stop();
+    }
+    return () => {
+      Speech.stop();
+    };
+  }, [handsFreeMode]);
 
   const handleConversationPress = async (id) => {
     try {

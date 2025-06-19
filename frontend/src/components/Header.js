@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 // import styles from '../styles/styles';
 
-const Header = ({ onMenuPress, theme, title, onLogout, onSettingsPress }) => {
+const Header = ({ onMenuPress, theme, title, onLogout, onSettingsPress, handsFreeMode }) => {
     const isDark = theme === 'dark';
 
     return (
@@ -14,13 +14,15 @@ const Header = ({ onMenuPress, theme, title, onLogout, onSettingsPress }) => {
                 borderBottomColor: isDark ? '#333' : '#ccc'
             }
         ]}>
-            <TouchableOpacity onPress={onMenuPress} style={styles.button}>
-                <Ionicons
-                    name="menu"
-                    size={24}
-                    color={isDark ? '#fff' : '#000'}
-                />
-            </TouchableOpacity>
+            {!handsFreeMode && (
+                <TouchableOpacity onPress={onMenuPress} style={styles.button}>
+                    <Ionicons
+                        name="menu"
+                        size={24}
+                        color={isDark ? '#fff' : '#000'}
+                    />
+                </TouchableOpacity>
+            )}
             <Text style={[
                 styles.title,
                 { color: isDark ? '#fff' : '#000' }

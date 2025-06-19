@@ -103,6 +103,7 @@ export default function App() {
                 t={t}
                 onLogout={handleLogout}
                 onSettingsPress={() => setIsSettingsOpen(true)}
+                handsFreeMode={settings.handsFreeMode}
               />
             ) : (
               <ChatScreen
@@ -111,6 +112,7 @@ export default function App() {
                 t={t}
                 onLogout={handleLogout}
                 onSettingsPress={() => setIsSettingsOpen(true)}
+                handsFreeMode={settings.handsFreeMode}
               />
             )}
           </KeyboardAvoidingView>

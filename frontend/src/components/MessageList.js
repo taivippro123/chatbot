@@ -16,7 +16,8 @@ const MessageList = ({
   theme, 
   language,
   style,
-  hideAudioButton
+  hideAudioButton,
+  renderCustomMessage
 }) => {
   const isDark = theme === 'dark';
   const listRef = useRef(null);
@@ -71,19 +72,25 @@ const MessageList = ({
     }, estimatedDuration);
   };
 
-  const renderItem = useCallback(({ item: message }) => (
-    <MemoizedMessageItem
-      key={message.id}
-      message={message}
-      theme={theme}
-      isPlaying={isPlaying}
-      currentPlayingId={currentPlayingId}
-      onPlayAudio={handlePlayAudio}
-      isUser={message.sender === 'user'}
-      language={language}
-      hideAudioButton={hideAudioButton}
-    />
-  ), [theme, isPlaying, currentPlayingId, language, hideAudioButton]);
+  const renderItem = useCallback(({ item: message }) => {
+    if (renderCustomMessage) {
+      const custom = renderCustomMessage(message);
+      if (custom) return custom;
+    }
+    return (
+      <MemoizedMessageItem
+        key={message.id}
+        message={message}
+        theme={theme}
+        isPlaying={isPlaying}
+        currentPlayingId={currentPlayingId}
+        onPlayAudio={handlePlayAudio}
+        isUser={message.sender === 'user'}
+        language={language}
+        hideAudioButton={hideAudioButton}
+      />
+    );
+  }, [theme, isPlaying, currentPlayingId, language, hideAudioButton, renderCustomMessage]);
 
   const handleScroll = useCallback(({ nativeEvent }) => {
     isScrolling.current = true;

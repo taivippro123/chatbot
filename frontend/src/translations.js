@@ -21,10 +21,10 @@ export const translations = {
     appearance: 'Giao diện',
     darkMode: 'Chế độ tối',
     handsFreeMode: 'Chế độ rảnh tay',
-    newsReader: 'Đọc tin tức',
+    newsReader: 'Trợ lý đọc tin tức',
     tapToRecord: 'Nhấn để ghi âm',
     recording: 'Đang ghi âm...',
-    newsReaderDescription: 'Chế độ an toàn cho lái xe - nghe tin tức và điều khiển bằng giọng nói'
+    newsReaderDescription: 'Chế độ rảnh tay - nghe tin tức và điều khiển bằng giọng nói'
     // ... existing translations ...
   },
   en: {
@@ -50,10 +50,10 @@ export const translations = {
     darkMode: 'Dark mode',
     handsFreeMode: 'Hands-free Mode',
     drivingMode: 'Driving Mode',
-    newsReader: 'News Reader',
+    newsReader: 'AI News Reader',
     tapToRecord: 'Tap to Record',
     recording: 'Recording...',
-    newsReaderDescription: 'Safe mode for driving - listen to news and voice control'
+    newsReaderDescription: 'Hands-free mode - listen to news and voice control'
     // ... existing translations ...
   }
 }; 

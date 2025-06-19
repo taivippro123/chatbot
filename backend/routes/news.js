@@ -34,7 +34,7 @@ function extractAudioUrl(articleUrl, pubDate) {
 
 async function getLatestArticles() {
   const feed = await parser.parseURL(RSS_URL);
-  return feed.items.slice(0, 20).map(item => {
+  return feed.items.map(item => {
     let cleanTitle = item.title;
     if (cleanTitle.includes('[CDATA[')) {
       cleanTitle = cleanTitle.replace(/^.*\[CDATA\[/, '').replace(/\]\].*$/, '');
@@ -58,13 +58,17 @@ async function getLatestArticles() {
 
 router.post('/', async (req, res) => {
   try {
+    const { offset = 0, limit = 10 } = req.query;
     const articles = await getLatestArticles();
     if (!articles || articles.length === 0) {
       return res.status(404).json({ error: 'No news articles found' });
     }
-    // Trả về 10 bài mới nhất
+    const start = parseInt(offset, 10) || 0;
+    const lim = parseInt(limit, 10) || 10;
+    const pagedArticles = articles.slice(start, start + lim);
     return res.json({
-      articles: articles.slice(0, 10)
+      articles: pagedArticles,
+      total: articles.length
     });
   } catch (err) {
     console.error('❌ Failed to fetch news:', err);

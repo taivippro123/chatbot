@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Platform, Alert, ActivityIndicator, FlatList, Text, Modal, TouchableHighlight } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Header from './Header';
@@ -6,6 +6,9 @@ import MessageList from './MessageList';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { API_URL } from '../config/api';
+import NewsArticleListMessage from './NewsArticleListMessage';
+import NewsArticlePlayer from './NewsArticlePlayer';
+import * as Speech from 'expo-speech';
 
 // Helper: convert arrayBuffer to base64 (React Native không có Buffer)
 function arrayBufferToBase64(buffer) {
@@ -23,7 +26,7 @@ function stripHtml(html) {
   return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 }
 
-const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
+const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token, handsFreeMode }) => {
   const [messages, setMessages] = useState([]); // Hiển thị tin tức dạng chat
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,12 +36,64 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
   const sound = useRef(null);
   const isDark = theme === 'dark';
   const [articleList, setArticleList] = useState([]);
-  const [showArticleModal, setShowArticleModal] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [selectedArticle, setSelectedArticle] = useState({ messageId: null, articleIndex: null, articles: [] });
+  const [newsPage, setNewsPage] = useState(0); // Số lần gọi, bắt đầu từ 0
+  const NEWS_LIMIT = 10;
+  const introRef = useRef(false);
+
+  // Tắt audio khi unmount hoặc khi tắt handsfree mode
+  useEffect(() => {
+    return () => {
+      if (sound.current) {
+        sound.current.unloadAsync();
+        sound.current = null;
+      }
+    };
+  }, []);
+  useEffect(() => {
+    if (!handsFreeMode && sound.current) {
+      sound.current.unloadAsync();
+      sound.current = null;
+    }
+  }, [handsFreeMode]);
+
+  // Phát audio giới thiệu khi vào handsfree mode và thêm message bot giới thiệu
+  useEffect(() => {
+    if (handsFreeMode && !introRef.current) {
+      const intro = 'Tôi là trợ lý đọc báo, hãy nói "Tin tức" và thưởng thức những tin nóng hổi ngay, bạn có thể nói "Xem thêm" để lựa chọn bài báo muốn nghe';
+      // Set lại audio mode trước khi phát TTS
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: false,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+      }).then(() => {
+        Speech.speak(intro, { language: 'vi-VN', pitch: 1.0, rate: 0.95 });
+      });
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString() + '-intro',
+          text: intro,
+          sender: 'bot',
+          created_at: new Date().toISOString(),
+          type: 'intro',
+        }
+      ]);
+      introRef.current = true;
+    }
+    // Cleanup: luôn stop audio khi rời khỏi handsFreeMode hoặc unmount, và reset flag
+    return () => {
+      Speech.stop();
+      introRef.current = false;
+    };
+  }, [handsFreeMode]);
 
   // Ghi âm và gửi lên API speech để lấy text
   const handleStartRecording = async () => {
     try {
+      Speech.stop(); // Dừng audio intro nếu đang phát
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission needed', 'Please grant microphone permission');
@@ -64,11 +119,7 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
       const uri = recording.current.getURI();
       recording.current = null;
       setIsRecording(false);
-
-      // Đọc file audio thành base64 string
       const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-
-      // Gửi audio lên API speech để lấy text (dạng JSON)
       const response = await fetch(`${API_URL}/speech`, {
         method: 'POST',
         headers: {
@@ -80,8 +131,6 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
       if (!response.ok) throw new Error('Speech to text failed');
       const { text } = await response.json();
       if (!text) throw new Error('No text returned from speech recognition');
-
-      // Thêm message user
       const userMessage = {
         id: Date.now().toString(),
         text,
@@ -89,44 +138,15 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
         created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev, userMessage]);
-
-      // Luôn gọi API /news không truyền query
-      const newsRes = await fetch(`${API_URL}/news`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (!newsRes.ok) throw new Error('Failed to get news');
-      const newsData = await newsRes.json();
-      console.log('newsData:', newsData);
-      let newsText = '';
-      let audioUrl = null;
-      if (Array.isArray(newsData.articles) && newsData.articles.length > 0) {
-        setArticleList(newsData.articles);
-        setShowArticleModal(true);
-        // Đọc lần lượt tất cả title bằng Google TTS
-        newsText = newsData.articles.map((a, i) => `${i + 1}. ${a.title}`).join('. ');
-        await playNewsWithGoogleTTS(newsText);
-        audioUrl = null;
-      } else if (Array.isArray(newsData.articles) && newsData.articles.length === 0) {
-        newsText = 'Không có bài báo nào trong chuyên mục này.';
+      // Nếu là lần đầu, page = 0, nếu user nói "xem thêm", page++
+      let nextPage = 0;
+      if (/xem thêm/i.test(text.trim())) {
+        nextPage = newsPage + 1;
+        setNewsPage(nextPage);
       } else {
-        newsText = newsData.message || 'Không tìm thấy bài báo phù hợp.';
+        setNewsPage(0);
       }
-      newsText = stripHtml(newsText);
-      // Thêm message bot
-      const botMessage = {
-        id: Date.now().toString() + '-bot',
-        text: newsText,
-        sender: 'bot',
-        created_at: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, botMessage]);
-      // Không phát audioUrl ở đây, chỉ phát khi user chọn bài
+      await fetchAndShowNews(nextPage);
     } catch (error) {
       console.error('Error in news reader:', error);
       Alert.alert('Error', error.message || 'Có lỗi xảy ra');
@@ -135,67 +155,64 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
     }
   };
 
-  // Phát audio mp3 từ backend Google TTS
-  const playNewsWithGoogleTTS = async (text) => {
+  // Hàm fetch news với page (không cộng dồn)
+  const fetchAndShowNews = async (page) => {
+    setIsLoading(true);
     try {
-      if (sound.current) {
-        await sound.current.unloadAsync();
-        sound.current = null;
-      }
-      setIsPlaying(true);
-      setCurrentPlayingId('news-bot');
-      // Gọi API backend /tts
-      const ttsRes = await fetch(`${API_URL}/tts`, {
+      const offset = page * NEWS_LIMIT;
+      const newsRes = await fetch(`${API_URL}/news?offset=${offset}&limit=${NEWS_LIMIT}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ text, language: 'vi-VN' }),
+        body: JSON.stringify({}),
       });
-      if (!ttsRes.ok) throw new Error('TTS failed');
-      const arrayBuffer = await ttsRes.arrayBuffer();
-      const base64Audio = arrayBufferToBase64(arrayBuffer);
-      const audioUri = `data:audio/mp3;base64,${base64Audio}`;
-      // Set audio mode để phát qua loa ngoài và volume to
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: false,
-        // interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: false,
-        // interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
-        playThroughEarpieceAndroid: false, // Bắt buộc phát qua loa ngoài
-      });
-      const { sound: playbackObj } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true, volume: 1.0 }
-      );
-      sound.current = playbackObj;
-      playbackObj.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          setIsPlaying(false);
-          setCurrentPlayingId(null);
-        }
-      });
-      await playbackObj.playAsync();
+      if (!newsRes.ok) throw new Error('Failed to get news');
+      const newsData = await newsRes.json();
+      let newsText = '';
+      let articleList = [];
+      if (Array.isArray(newsData.articles) && newsData.articles.length > 0) {
+        articleList = newsData.articles;
+        newsText = articleList.map((a, i) => `${offset + i + 1}. ${a.title}`).join('. ');
+      } else if (Array.isArray(newsData.articles) && newsData.articles.length === 0) {
+        newsText = 'Không có bài báo nào trong chuyên mục này.';
+      } else {
+        newsText = newsData.message || 'Không tìm thấy bài báo phù hợp.';
+      }
+      newsText = stripHtml(newsText);
+      const botMessage = {
+        id: Date.now().toString() + '-bot',
+        text: newsText,
+        sender: 'bot',
+        created_at: new Date().toISOString(),
+        articles: articleList,
+        type: 'news-list',
+      };
+      setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      setIsPlaying(false);
-      setCurrentPlayingId(null);
-      console.error('Error playing TTS:', error);
-      Alert.alert('Error', 'Không thể phát audio TTS');
+      Alert.alert('Error', error.message || 'Có lỗi xảy ra');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // Thêm hàm phát audioUrl trực tiếp
-  const playAudioUrl = async (audioUrl) => {
+  // Điều khiển nghe bài báo
+  const [isArticlePlaying, setIsArticlePlaying] = useState(false);
+  const [isArticlePaused, setIsArticlePaused] = useState(false);
+
+  // Hàm phát audio cho bài báo trong 1 message bot cụ thể
+  const playSelectedArticle = async (articles, idx) => {
+    const article = articles[idx];
+    if (!article) return;
+    setIsArticlePlaying(true);
+    setIsArticlePaused(false);
+    setCurrentPlayingId('news-bot');
+    if (sound.current) {
+      await sound.current.unloadAsync();
+      sound.current = null;
+    }
     try {
-      if (sound.current) {
-        await sound.current.unloadAsync();
-        sound.current = null;
-      }
-      setIsPlaying(true);
-      setCurrentPlayingId('news-bot');
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: false,
@@ -204,26 +221,71 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
         playThroughEarpieceAndroid: false,
       });
       const { sound: playbackObj } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
+        { uri: article.audioUrl },
         { shouldPlay: true, volume: 1.0 }
       );
       sound.current = playbackObj;
       playbackObj.setOnPlaybackStatusUpdate((status) => {
         if (status.didJustFinish) {
-          setIsPlaying(false);
+          setIsArticlePlaying(false);
+          setIsArticlePaused(false);
           setCurrentPlayingId(null);
         }
       });
       await playbackObj.playAsync();
     } catch (error) {
-      setIsPlaying(false);
+      setIsArticlePlaying(false);
+      setIsArticlePaused(false);
       setCurrentPlayingId(null);
-      console.error('Error playing audioUrl:', error);
       Alert.alert('Error', 'Không thể phát audio bài báo');
     }
   };
 
+  // Khi chọn bài báo ở 1 message bot cụ thể
+  const handleSelectArticle = (messageId, articles, idx) => {
+    setSelectedArticle({ messageId, articleIndex: idx, articles });
+    playSelectedArticle(articles, idx);
+  };
+
+  const handleStop = async () => {
+    if (sound.current) {
+      await sound.current.pauseAsync();
+      setIsArticlePaused(true);
+      setIsArticlePlaying(false);
+    }
+  };
+  const handlePlay = async () => {
+    if (sound.current) {
+      await sound.current.playAsync();
+      setIsArticlePaused(false);
+      setIsArticlePlaying(true);
+    }
+  };
+  const handleForward = () => {
+    if (
+      selectedArticle.messageId &&
+      selectedArticle.articleIndex !== null &&
+      selectedArticle.articleIndex < selectedArticle.articles.length - 1
+    ) {
+      const nextIdx = selectedArticle.articleIndex + 1;
+      setSelectedArticle({ ...selectedArticle, articleIndex: nextIdx });
+      playSelectedArticle(selectedArticle.articles, nextIdx);
+    }
+  };
+  const handleBack = () => {
+    if (
+      selectedArticle.messageId &&
+      selectedArticle.articleIndex !== null &&
+      selectedArticle.articleIndex > 0
+    ) {
+      const prevIdx = selectedArticle.articleIndex - 1;
+      setSelectedArticle({ ...selectedArticle, articleIndex: prevIdx });
+      playSelectedArticle(selectedArticle.articles, prevIdx);
+    }
+  };
+
   const handleRecordPress = () => {
+    Speech.stop(); // Dừng audio intro nếu đang phát
     if (isRecording) {
       handleStopRecording();
     } else {
@@ -236,9 +298,10 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
       <Header
         theme={theme}
         title={t?.newsReader || 'News Reader'}
-        onMenuPress={() => { }}
+        onMenuPress={handsFreeMode ? undefined : () => { }}
         onLogout={onLogout}
         onSettingsPress={onSettingsPress}
+        handsFreeMode={handsFreeMode}
       />
       <View style={styles.content}>
         <MessageList
@@ -246,11 +309,48 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
           theme={theme}
           language={t?.lang || 'vi'}
           hideAudioButton={true}
+          renderCustomMessage={(msg) => {
+            if (msg.type === 'news-list' && msg.articles && msg.articles.length > 0) {
+              return (
+                <View style={{ backgroundColor: isDark ? '#23232b' : '#f5f5f7', borderRadius: 8, padding: 12, marginVertical: 8 }}>
+                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8, color: isDark ? '#fff' : '#000' }}>Danh sách bài báo:</Text>
+                  {msg.articles.map((article, idx) => (
+                    <View key={article.url} style={{ marginBottom: 8, borderBottomWidth: 1, borderBottomColor: isDark ? '#333' : '#eee', paddingBottom: 8 }}>
+                      <TouchableOpacity onPress={() => handleSelectArticle(msg.id, msg.articles, idx)}>
+                        <Text style={{ fontSize: 15, color: selectedArticle.messageId === msg.id && selectedArticle.articleIndex === idx
+                          ? (isDark ? '#4cd964' : '#007AFF')
+                          : (isDark ? '#fff' : '#222'), fontWeight: selectedArticle.messageId === msg.id && selectedArticle.articleIndex === idx ? 'bold' : 'normal' }}>
+                          {idx + 1}. {article.title}
+                        </Text>
+                      </TouchableOpacity>
+                      {selectedArticle.messageId === msg.id && selectedArticle.articleIndex === idx && (
+                        <NewsArticlePlayer
+                          article={article}
+                          onBack={handleBack}
+                          onStop={handleStop}
+                          onPlay={handlePlay}
+                          onForward={handleForward}
+                          isPlaying={isArticlePlaying}
+                          isPaused={isArticlePaused}
+                          theme={theme}
+                        />
+                      )}
+                    </View>
+                  ))}
+                </View>
+              );
+            }
+            return null;
+          }}
         />
       </View>
       <View style={styles.micBar}>
         <TouchableOpacity
-          style={[styles.micButton, isRecording && styles.micButtonActive]}
+          style={[
+            styles.micButton,
+            { backgroundColor: isDark ? '#23232b' : '#e5e5ea' },
+            isRecording && { backgroundColor: isDark ? '#3a3a4a' : '#ffeaea' }
+          ]}
           onPress={handleRecordPress}
           disabled={isLoading}
         >
@@ -265,42 +365,6 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token }) => {
           )}
         </TouchableOpacity>
       </View>
-      <Modal
-        visible={showArticleModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowArticleModal(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center' }}>
-          <View style={{ margin: 24, backgroundColor: '#fff', borderRadius: 8, padding: 16, maxHeight: '80%' }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Chọn bài báo để nghe</Text>
-            <FlatList
-              data={articleList}
-              keyExtractor={item => item.url}
-              renderItem={({ item, index }) => (
-                <TouchableHighlight
-                  underlayColor="#eee"
-                  onPress={async () => {
-                    setShowArticleModal(false);
-                    setSelectedArticle(item);
-                    if (item.audioUrl) {
-                      await playAudioUrl(item.audioUrl);
-                    } else {
-                      Alert.alert('Không có audio cho bài báo này');
-                    }
-                  }}
-                  style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' }}
-                >
-                  <Text style={{ fontSize: 16 }}>{index + 1}. {item.title}</Text>
-                </TouchableHighlight>
-              )}
-            />
-            <TouchableOpacity onPress={() => setShowArticleModal(false)} style={{ marginTop: 16, alignSelf: 'flex-end' }}>
-              <Text style={{ color: '#007AFF', fontWeight: 'bold' }}>Đóng</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -323,14 +387,12 @@ const styles = StyleSheet.create({
   micButton: {
     padding: 16,
     borderRadius: 40,
-    backgroundColor: '#e5e5ea',
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
       android: { elevation: 4 },
     }),
   },
   micButtonActive: {
-    backgroundColor: '#ffeaea',
   },
 });
 
