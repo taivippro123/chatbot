@@ -62,5 +62,6 @@ npx expo start
 Use an Android Emulator or scan the QR code with Expo Go App on your Android/iOS device.
 ```
 ## ⚠️ Note
+- Make sure your phone and computer are connected to the same Wi-Fi network.
 - The first registration or login may take a long time due to Render's free tier
 
