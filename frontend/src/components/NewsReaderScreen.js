@@ -40,6 +40,14 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token, handsFre
   const [newsPage, setNewsPage] = useState(0); // Số lần gọi, bắt đầu từ 0
   const NEWS_LIMIT = 10;
   const introRef = useRef(false);
+  const [isArticlePlaying, setIsArticlePlaying] = useState(false);
+  const [isArticlePaused, setIsArticlePaused] = useState(false);
+  const [isAutoPlay, setIsAutoPlay] = useState(false);
+  const isAutoPlayRef = useRef(isAutoPlay);
+
+  useEffect(() => {
+    isAutoPlayRef.current = isAutoPlay;
+  }, [isAutoPlay]);
 
   // Tắt audio khi unmount hoặc khi tắt handsfree mode
   useEffect(() => {
@@ -197,10 +205,6 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token, handsFre
     }
   };
 
-  // Điều khiển nghe bài báo
-  const [isArticlePlaying, setIsArticlePlaying] = useState(false);
-  const [isArticlePaused, setIsArticlePaused] = useState(false);
-
   // Hàm phát audio cho bài báo trong 1 message bot cụ thể
   const playSelectedArticle = async (articles, idx) => {
     const article = articles[idx];
@@ -225,11 +229,17 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token, handsFre
         { shouldPlay: true, volume: 1.0 }
       );
       sound.current = playbackObj;
-      playbackObj.setOnPlaybackStatusUpdate((status) => {
+      playbackObj.setOnPlaybackStatusUpdate(async (status) => {
         if (status.didJustFinish) {
           setIsArticlePlaying(false);
           setIsArticlePaused(false);
           setCurrentPlayingId(null);
+          // Auto play next if enabled (check ref for latest value)
+          if (isAutoPlayRef.current && articles && idx < articles.length - 1) {
+            const nextIdx = idx + 1;
+            setSelectedArticle((prev) => ({ ...prev, articleIndex: nextIdx }));
+            await playSelectedArticle(articles, nextIdx);
+          }
         }
       });
       await playbackObj.playAsync();
@@ -237,7 +247,7 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token, handsFre
       setIsArticlePlaying(false);
       setIsArticlePaused(false);
       setCurrentPlayingId(null);
-      Alert.alert('Error', 'Không thể phát audio bài báo');
+      Alert.alert('Error', t?.error || 'Error', t?.failedToPlayAudio || 'Không thể phát audio bài báo');
     }
   };
 
@@ -313,7 +323,7 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token, handsFre
             if (msg.type === 'news-list' && msg.articles && msg.articles.length > 0) {
               return (
                 <View style={{ backgroundColor: isDark ? '#23232b' : '#f5f5f7', borderRadius: 8, padding: 12, marginVertical: 8 }}>
-                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8, color: isDark ? '#fff' : '#000' }}>Danh sách bài báo:</Text>
+                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8, color: isDark ? '#fff' : '#000' }}>{t?.newsListTitle || 'Danh sách bài báo:'}</Text>
                   {msg.articles.map((article, idx) => (
                     <View key={article.url} style={{ marginBottom: 8, borderBottomWidth: 1, borderBottomColor: isDark ? '#333' : '#eee', paddingBottom: 8 }}>
                       <TouchableOpacity onPress={() => handleSelectArticle(msg.id, msg.articles, idx)}>
@@ -333,6 +343,9 @@ const NewsReaderScreen = ({ theme, t, onLogout, onSettingsPress, token, handsFre
                           isPlaying={isArticlePlaying}
                           isPaused={isArticlePaused}
                           theme={theme}
+                          isAutoPlay={isAutoPlay}
+                          onToggleAutoPlay={() => setIsAutoPlay((prev) => !prev)}
+                          t={t}
                         />
                       )}
                     </View>

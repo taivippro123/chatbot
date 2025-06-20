@@ -24,7 +24,10 @@ export const translations = {
     newsReader: 'Trợ lý đọc tin tức',
     tapToRecord: 'Nhấn để ghi âm',
     recording: 'Đang ghi âm...',
-    newsReaderDescription: 'Chế độ rảnh tay - nghe tin tức và điều khiển bằng giọng nói'
+    newsReaderDescription: 'Chế độ rảnh tay - nghe tin tức và điều khiển bằng giọng nói',
+    autoPlay: 'Phát liên tục',
+    on: 'Bật',
+    off: 'Tắt',
     // ... existing translations ...
   },
   en: {
@@ -53,7 +56,10 @@ export const translations = {
     newsReader: 'AI News Reader',
     tapToRecord: 'Tap to Record',
     recording: 'Recording...',
-    newsReaderDescription: 'Hands-free mode - listen to news and voice control'
+    newsReaderDescription: 'Hands-free mode - listen to news and voice control',
+    autoPlay: 'Auto Play',
+    on: 'On',
+    off: 'Off',
     // ... existing translations ...
   }
 }; 
